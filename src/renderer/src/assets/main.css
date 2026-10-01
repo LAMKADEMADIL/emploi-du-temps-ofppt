@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Cairo:wght@300;400;500;600;700;800&display=swap');
+/* LIGHT GRAY THEME */
 
 /* ============================
    CSS VARIABLES - DESIGN SYSTEM
@@ -24,28 +25,27 @@
   --danger-light: #f87171;
 
   /* Background */
-  --bg-primary: #0f0f1a;
-  --bg-secondary: #151528;
-  --bg-card: #1a1a2e;
-  --bg-card-hover: #1f1f38;
-  --bg-input: #12122a;
-  --bg-sidebar: #0d0d1f;
+  --bg-primary: #f0f2f5;
+  --bg-secondary: #e8eaed;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8f9fa;
+  --bg-input: #f5f6f7;
+  --bg-sidebar: #ffffff;
 
   /* Borders */
-  --border: rgba(255, 255, 255, 0.06);
-  --border-hover: rgba(255, 255, 255, 0.12);
+  --border: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.15);
   --border-primary: rgba(79, 70, 229, 0.4);
 
   /* Text */
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a5568;
+  --text-muted: #9aa5b4;
 
-  /* Shadows */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.6);
-  --shadow-primary: 0 4px 20px rgba(79, 70, 229, 0.3);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.12);
+  --shadow-primary: 0 4px 20px rgba(79, 70, 229, 0.2);
 
   /* Radius */
   --radius-sm: 8px;
@@ -72,7 +72,6 @@
 
 html {
   font-size: 14px;
-  direction: rtl;
 }
 
 body {
@@ -84,6 +83,11 @@ body {
   height: 100vh;
   width: 100vw;
 }
+
+/* Scrollbar for light theme */
+::-webkit-scrollbar-track { background: #e8eaed; }
+::-webkit-scrollbar-thumb { background: #c0c4cc; }
+::-webkit-scrollbar-thumb:hover { background: #9aa5b4; }
 
 #root {
   height: 100vh;
@@ -117,18 +121,19 @@ body {
   min-width: var(--sidebar-width);
   height: 100vh;
   background: var(--bg-sidebar);
-  border-left: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.06);
 }
 
 .sidebar::before {
   content: '';
   position: absolute;
   top: 0;
-  right: 0;
+  inset-inline-start: 0;
   width: 2px;
   height: 100%;
   background: linear-gradient(180deg, transparent, var(--primary), transparent);
@@ -206,7 +211,7 @@ body {
   text-decoration: none;
   background: none;
   width: 100%;
-  text-align: right;
+  text-align: start;
 }
 
 .nav-item:hover {
@@ -494,7 +499,6 @@ body {
   font-family: inherit;
   transition: var(--transition);
   width: 100%;
-  direction: rtl;
 }
 
 .form-input:focus,
@@ -539,7 +543,7 @@ thead {
 
 th {
   padding: 12px 16px;
-  text-align: right;
+  text-align: start;
   font-weight: 600;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -633,7 +637,6 @@ tbody tr:last-child td {
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
   animation: slideUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  direction: rtl;
 }
 
 .modal-header {
@@ -793,13 +796,13 @@ tbody tr:last-child td {
 
 .search-bar .search-icon {
   position: absolute;
-  right: 12px;
+  inset-inline-end: 12px;
   color: var(--text-muted);
   pointer-events: none;
 }
 
 .search-bar input {
-  padding-right: 38px;
+  padding-inline-end: 38px;
 }
 
 /* ============================
@@ -948,7 +951,7 @@ tbody tr:last-child td {
   position: absolute;
   width: 18px;
   height: 18px;
-  right: 2px;
+  inset-inline-end: 2px;
   top: 2px;
   background: var(--text-muted);
   border-radius: 50%;
@@ -960,9 +963,13 @@ tbody tr:last-child td {
   border-color: var(--success);
 }
 
-.toggle input:checked + .toggle-slider::before {
-  background: var(--success);
+[dir="rtl"] .toggle input:checked + .toggle-slider::before {
   transform: translateX(-20px);
+  background: var(--success);
+}
+[dir="ltr"] .toggle input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+  background: var(--success);
 }
 
 /* ============================

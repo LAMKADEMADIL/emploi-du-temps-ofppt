@@ -1,145 +1,179 @@
-import React, { useEffect, useState } from 'react'
-import { Users, DoorOpen, BookOpen, UsersRound, CalendarDays, TrendingUp } from 'lucide-react'
-import { formateursService, sallesService, filieresService, groupesService, seancesService } from '../services/firebaseService'
+import React, { useState, useEffect } from 'react'
+import {
+  Users,
+  DoorOpen,
+  CalendarDays,
+  UsersRound,
+  Plus,
+  Search,
+  FileDown
+} from 'lucide-react'
+import {
+  formateursService,
+  sallesService,
+  groupesService,
+  seancesService
+} from '../services/firebaseService'
 import type { NavPage } from '../types'
+import { useTranslation } from '../lib/i18n'
 
 interface DashboardProps {
   onNavigate: (page: NavPage) => void
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps): React.ReactElement {
-  const [stats, setStats] = useState({ formateurs: 0, salles: 0, filieres: 0, groupes: 0, seances: 0, enStage: 0 })
-  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    formateurs: 0,
+    salles: 0,
+    groupesStage: 0,
+    seances: 0
+  })
+  const { t } = useTranslation()
 
   useEffect(() => {
-    async function loadStats() {
+    async function fetchStats() {
       try {
-        const [formateurs, salles, filieres, groupes, seances] = await Promise.all([
+        const [f, s, g, se] = await Promise.all([
           formateursService.getAll(),
           sallesService.getAll(),
-          filieresService.getAll(),
           groupesService.getAll(),
           seancesService.getAll()
         ])
+        
         setStats({
-          formateurs: formateurs.length,
-          salles: salles.length,
-          filieres: filieres.length,
-          groupes: groupes.length,
-          seances: seances.length,
-          enStage: groupes.filter(g => g.en_stage).length
+          formateurs: f.length,
+          salles: s.length,
+          groupesStage: g.filter(x => x.en_stage).length,
+          seances: se.length
         })
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
+      } catch (error) {
+        console.error('Error fetching stats:', error)
       }
     }
-    loadStats()
+    fetchStats()
   }, [])
 
-  const statCards = [
-    { label: 'المكونون', value: stats.formateurs, icon: <Users size={24} color="white" />, color: '#4f46e5', page: 'formateurs' as NavPage },
-    { label: 'القاعات والورشات', value: stats.salles, icon: <DoorOpen size={24} color="white" />, color: '#06b6d4', page: 'salles' as NavPage },
-    { label: 'الشعب', value: stats.filieres, icon: <BookOpen size={24} color="white" />, color: '#8b5cf6', page: 'filieres' as NavPage },
-    { label: 'الأفواج', value: stats.groupes, icon: <UsersRound size={24} color="white" />, color: '#f59e0b', page: 'groupes' as NavPage },
-    { label: 'الحصص المبرمجة', value: stats.seances, icon: <CalendarDays size={24} color="white" />, color: '#10b981', page: 'timetable' as NavPage },
-    { label: 'أفواج في التدريب', value: stats.enStage, icon: <TrendingUp size={24} color="white" />, color: '#ef4444', page: 'groupes' as NavPage }
-  ]
-
   return (
-    <div>
+    <div className="fade-in-up">
       <div className="page-header">
         <div className="page-header-info">
-          <h1>لوحة القيادة</h1>
-          <p>نظرة عامة على نظام إدارة استعمال الزمن</p>
+          <h1>{t('dash.title')}</h1>
+          <p>{t('dash.subtitle')}</p>
         </div>
         <div className="badge badge-success">
-          <span>●</span> النظام يعمل بشكل طبيعي
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
+          {t('dash.status')}
         </div>
       </div>
 
       <div className="page-body">
-        {loading ? (
-          <div className="loading-spinner"><div className="spinner" /></div>
-        ) : (
-          <>
-            <div className="stats-grid fade-in-up">
-              {statCards.map((card, i) => (
-                <div
-                  key={i}
-                  className="stat-card"
-                  style={{ '--card-color': card.color } as React.CSSProperties}
-                  onClick={() => onNavigate(card.page)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="stat-icon" style={{ background: card.color }}>
-                    {card.icon}
-                  </div>
-                  <div className="stat-info">
-                    <h3>{card.value}</h3>
-                    <p>{card.label}</p>
-                  </div>
-                </div>
-              ))}
+        <div className="stats-grid">
+          <div className="stat-card" style={{ '--card-color': 'var(--primary)' } as any}>
+            <div className="stat-icon"><Users size={24} color="white" /></div>
+            <div className="stat-info">
+              <h3>{stats.formateurs}</h3>
+              <p>{t('dash.stat.formateurs')}</p>
             </div>
+          </div>
+          
+          <div className="stat-card" style={{ '--card-color': 'var(--accent)' } as any}>
+            <div className="stat-icon"><CalendarDays size={24} color="white" /></div>
+            <div className="stat-info">
+              <h3>{stats.seances}</h3>
+              <p>{t('dash.stat.seances')}</p>
+            </div>
+          </div>
+          
+          <div className="stat-card" style={{ '--card-color': 'var(--warning)' } as any}>
+            <div className="stat-icon"><UsersRound size={24} color="white" /></div>
+            <div className="stat-info">
+              <h3>{stats.groupesStage}</h3>
+              <p>{t('dash.stat.stage')}</p>
+            </div>
+          </div>
+          
+          <div className="stat-card" style={{ '--card-color': 'var(--success)' } as any}>
+            <div className="stat-icon"><DoorOpen size={24} color="white" /></div>
+            <div className="stat-info">
+              <h3>{stats.salles}</h3>
+              <p>{t('dash.stat.salles')}</p>
+            </div>
+          </div>
+        </div>
 
-            <div className="dashboard-grid fade-in-up">
-              <div className="card">
-                <div className="card-header">
-                  <h3 className="card-title">🚀 بدء سريع</h3>
+        <div className="dashboard-grid">
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">{t('dash.quickStart')}</h3>
+            </div>
+            <div className="recent-list">
+              <button className="recent-item" onClick={() => onNavigate('formateurs')} style={{ border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'start' }}>
+                <div className="recent-item-icon" style={{ background: 'rgba(79, 70, 229, 0.15)', color: 'var(--primary-light)' }}>
+                  <Plus size={18} />
                 </div>
-                <div className="recent-list">
-                  {[
-                    { label: 'إضافة مكون جديد', page: 'formateurs' as NavPage, color: '#4f46e5' },
-                    { label: 'إضافة قاعة جديدة', page: 'salles' as NavPage, color: '#06b6d4' },
-                    { label: 'برمجة حصة في الجدول', page: 'timetable' as NavPage, color: '#10b981' },
-                    { label: 'البحث عن قاعة شاغرة', page: 'vacances' as NavPage, color: '#f59e0b' },
-                    { label: 'تصدير الجداول PDF', page: 'export' as NavPage, color: '#8b5cf6' }
-                  ].map((item, i) => (
-                    <div
-                      key={i}
-                      className="recent-item"
-                      onClick={() => onNavigate(item.page)}
-                      role="button"
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <div className="recent-item-icon" style={{ background: item.color }}>
-                        <span style={{ fontSize: 14 }}>→</span>
-                      </div>
-                      <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{item.label}</span>
-                    </div>
-                  ))}
+                <div>
+                  <h4 style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t('dash.addFormateur')}</h4>
                 </div>
+              </button>
+              
+              <button className="recent-item" onClick={() => onNavigate('salles')} style={{ border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'start' }}>
+                <div className="recent-item-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success-light)' }}>
+                  <DoorOpen size={18} />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t('dash.addSalle')}</h4>
+                </div>
+              </button>
+
+              <button className="recent-item" onClick={() => onNavigate('timetable')} style={{ border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'start' }}>
+                <div className="recent-item-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-light)' }}>
+                  <CalendarDays size={18} />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t('dash.addSeance')}</h4>
+                </div>
+              </button>
+              
+              <button className="recent-item" onClick={() => onNavigate('vacances')} style={{ border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'start' }}>
+                <div className="recent-item-icon" style={{ background: 'rgba(6, 182, 212, 0.15)', color: 'var(--accent-light)' }}>
+                  <Search size={18} />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t('dash.findSalle')}</h4>
+                </div>
+              </button>
+
+              <button className="recent-item" onClick={() => onNavigate('export')} style={{ border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'start' }}>
+                <div className="recent-item-icon" style={{ background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger-light)' }}>
+                  <FileDown size={18} />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t('dash.exportPdf')}</h4>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">{t('dash.summary')}</h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ padding: 16, background: 'var(--bg-secondary)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>{t('dash.stat.formateurs')}</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary-light)' }}>{stats.formateurs}</div>
               </div>
-
-              <div className="card">
-                <div className="card-header">
-                  <h3 className="card-title">📊 ملخص النظام</h3>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                    <span className="badge badge-primary">{stats.formateurs} مكون</span>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>المكونون المسجلون</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                    <span className="badge badge-success">{stats.seances} حصة</span>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>الحصص المبرمجة</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                    <span className="badge badge-warning">{stats.enStage} فوج</span>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>أفواج في التدريب الميداني</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                    <span className="badge" style={{ background: 'rgba(6,182,212,0.1)', color: 'var(--accent-light)', border: '1px solid rgba(6,182,212,0.2)' }}>{stats.salles} قاعة</span>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>القاعات والورشات</span>
-                  </div>
-                </div>
+              <div style={{ padding: 16, background: 'var(--bg-secondary)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>{t('dash.stat.seances')}</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent-light)' }}>{stats.seances}</div>
+              </div>
+              <div style={{ padding: 16, background: 'var(--bg-secondary)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>{t('dash.stat.stage')}</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--warning-light)' }}>{stats.groupesStage}</div>
               </div>
             </div>
-          </>
-        )}
+          </div>
+        </div>
       </div>
     </div>
   )

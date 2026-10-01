@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import './assets/main.css'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
@@ -10,10 +10,21 @@ import TimetablePage from './pages/TimetablePage'
 import VacancesPage from './pages/VacancesPage'
 import ExportPage from './pages/ExportPage'
 import type { NavPage } from './types'
-import { Toaster } from 'react-hot-toast'
+import { Toaster, toast } from 'react-hot-toast'
+import { I18nProvider, useTranslation } from './lib/i18n'
+import { seedDemoData } from './lib/seedData'
 
-function App(): React.ReactElement {
+function AppContent(): React.ReactElement {
   const [currentPage, setCurrentPage] = useState<NavPage>('dashboard')
+  const { lang } = useTranslation()
+
+  useEffect(() => {
+    seedDemoData().then((seeded) => {
+      if (seeded) {
+        toast.success(lang === 'ar' ? '✅ تم تحميل البيانات التجريبية!' : '✅ Données de démonstration chargées!')
+      }
+    })
+  }, [])
 
   const renderPage = (): React.ReactElement => {
     switch (currentPage) {
@@ -32,16 +43,17 @@ function App(): React.ReactElement {
   return (
     <div className="app-layout">
       <Toaster
-        position="bottom-left"
+        position={lang === 'ar' ? 'bottom-left' : 'bottom-right'}
         toastOptions={{
           style: {
-            background: '#1a1a2e',
-            color: '#f1f5f9',
-            border: '1px solid rgba(255,255,255,0.08)',
+            background: '#ffffff',
+            color: '#1a1a2e',
+            border: '1px solid rgba(0,0,0,0.08)',
             borderRadius: '12px',
             fontFamily: 'Cairo, Inter, sans-serif',
             fontSize: '13px',
-            direction: 'rtl'
+            direction: lang === 'ar' ? 'rtl' : 'ltr',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.12)'
           }
         }}
       />
@@ -50,6 +62,14 @@ function App(): React.ReactElement {
       </main>
       <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
     </div>
+  )
+}
+
+function App(): React.ReactElement {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
   )
 }
 
