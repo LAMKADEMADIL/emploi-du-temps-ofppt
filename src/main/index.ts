@@ -1,8 +1,11 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 function createWindow(): void {
+  const iconPath = join(__dirname, '../../resources/icons/icon.jpg')
+  const appIcon = nativeImage.createFromPath(iconPath)
+  
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -12,6 +15,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     titleBarStyle: 'default',
     title: 'نظام إدارة استعمال الزمن - OFPPT',
+    icon: appIcon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

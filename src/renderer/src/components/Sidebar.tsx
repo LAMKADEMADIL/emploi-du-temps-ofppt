@@ -12,7 +12,8 @@ import {
   Globe
 } from 'lucide-react'
 import type { NavPage } from '../types'
-import { useTranslation, Language } from '../lib/i18n'
+import { useTranslation } from '../lib/i18n'
+import ofpptLogo from '../assets/ofppt_logo.jpg'
 
 interface SidebarProps {
   currentPage: NavPage
@@ -39,10 +40,14 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps): Reac
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">📅</div>
+          <img 
+            src={ofpptLogo} 
+            alt="OFPPT Logo" 
+            style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'contain', background: '#fff', flexShrink: 0 }} 
+          />
           <div className="sidebar-logo-text">
-            <h2>{t('app.title')}</h2>
-            <span>{t('app.subtitle')}</span>
+            <h2>نظام إدارة الزمن</h2>
+            <span>OFPPT - ISTA</span>
           </div>
         </div>
       </div>
