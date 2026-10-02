@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { groupesService, filieresService } from '../services/firebaseService'
 import type { Groupe, Filiere } from '../types'
+import { useTranslation } from '../lib/i18n'
 
 export default function GroupesPage(): React.ReactElement {
   const [groupes, setGroupes] = useState<Groupe[]>([])
@@ -10,6 +11,7 @@ export default function GroupesPage(): React.ReactElement {
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const { lang } = useTranslation()
   
   const [codeGroupe, setCodeGroupe] = useState('')
   const [idFiliere, setIdFiliere] = useState('')
@@ -108,63 +110,72 @@ export default function GroupesPage(): React.ReactElement {
     <div className="fade-in-up">
       <div className="page-header">
         <div className="page-header-info">
-          <h1>إدارة الأفواج</h1>
-          <p>إدارة المجموعات وحالتهم (في المعهد أو في فترة تدريب ميداني Stage)</p>
+          <h1>{lang === 'ar' ? 'إدارة الأفواج' : 'Gestion des Groupes'}</h1>
+          <p>{lang === 'ar' ? 'إدارة المجموعات وحالتهم (في المعهد أو في فترة تدريب ميداني Stage)' : 'Gestion des groupes et statut de stage'}</p>
         </div>
         <button 
           className="btn btn-primary" 
+          style={{ padding: '11px 22px', fontSize: '14px', gap: '8px', fontWeight: 600 }}
           onClick={() => {
             if (filieres.length === 0) {
-              toast.error('يجب إضافة شعبة واحدة على الأقل قبل إضافة الأفواج')
+              toast.error(lang === 'ar' ? 'يجب إضافة شعبة واحدة على الأقل قبل إضافة الأفواج' : 'Ajoutez au moins une filière avant d\'ajouter des groupes')
               return
             }
             openModal()
           }}
         >
-          <Plus size={16} /> إضافة فوج جديد
+          <Plus size={18} /> {lang === 'ar' ? 'إضافة فوج جديد' : 'Ajouter un groupe'}
         </button>
       </div>
 
       <div className="page-body">
-        <div className="card">
+        <div className="card" style={{ padding: '24px' }}>
           {loading ? (
             <div className="loading-spinner"><div className="spinner" /></div>
           ) : groupes.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">👥</div>
-              <h3>لا توجد أفواج</h3>
-              <p>قم بإضافة الأفواج للبدء في جدولة الحصص</p>
+              <h3>{lang === 'ar' ? 'لا توجد أفواج' : 'Aucun groupe'}</h3>
+              <p>{lang === 'ar' ? 'قم بإضافة الأفواج للبدء في جدولة الحصص' : 'Ajoutez des groupes pour commencer la planification'}</p>
             </div>
           ) : (
             <div className="table-wrapper">
               <table>
                 <thead>
                   <tr>
-                    <th>رمز الفوج</th>
-                    <th>الشعبة التابع لها</th>
-                    <th>حالة الفوج</th>
-                    <th style={{ width: 120 }}>الإجراءات</th>
+                    <th style={{ width: 180 }}>{lang === 'ar' ? 'رمز الفوج' : 'Code Groupe'}</th>
+                    <th>{lang === 'ar' ? 'الشعبة التابع لها' : 'Filière'}</th>
+                    <th style={{ width: 200 }}>{lang === 'ar' ? 'حالة الفوج' : 'Statut'}</th>
+                    <th style={{ width: 140, textAlign: 'center' }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groupes.map((g) => (
                     <tr key={g.id}>
-                      <td style={{ fontWeight: 600 }}>{g.code_groupe}</td>
+                      <td style={{ fontWeight: 600, fontSize: '15px' }}>{g.code_groupe}</td>
                       <td><span className="badge badge-primary">{g.nom_filiere}</span></td>
                       <td>
                         {g.en_stage ? (
-                          <span className="badge badge-warning">في تدريب (Stage)</span>
+                          <span className="badge badge-warning">{lang === 'ar' ? 'في تدريب (Stage)' : 'En Stage'}</span>
                         ) : (
-                          <span className="badge badge-success">في المعهد</span>
+                          <span className="badge badge-success">{lang === 'ar' ? 'في المعهد' : 'En Cours'}</span>
                         )}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button className="btn btn-secondary btn-icon" onClick={() => openModal(g)}>
-                            <Edit size={14} />
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                          <button 
+                            className="btn btn-secondary btn-icon" 
+                            title={lang === 'ar' ? 'تعديل' : 'Modifier'} 
+                            onClick={() => openModal(g)}
+                          >
+                            <Edit size={16} />
                           </button>
-                          <button className="btn btn-danger btn-icon" onClick={() => handleDelete(g.id!)}>
-                            <Trash2 size={14} />
+                          <button 
+                            className="btn btn-danger btn-icon" 
+                            title={lang === 'ar' ? 'حذف' : 'Supprimer'} 
+                            onClick={() => handleDelete(g.id!)}
+                          >
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>

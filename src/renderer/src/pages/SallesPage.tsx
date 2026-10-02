@@ -3,12 +3,14 @@ import { Plus, Trash2, Edit } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { sallesService } from '../services/firebaseService'
 import type { Salle } from '../types'
+import { useTranslation } from '../lib/i18n'
 
 export default function SallesPage(): React.ReactElement {
   const [salles, setSalles] = useState<Salle[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const { lang } = useTranslation()
   
   const [nomSalle, setNomSalle] = useState('')
   const [typeSalle, setTypeSalle] = useState<'Salle' | 'Atelier'>('Salle')
@@ -85,50 +87,64 @@ export default function SallesPage(): React.ReactElement {
     <div className="fade-in-up">
       <div className="page-header">
         <div className="page-header-info">
-          <h1>إدارة القاعات والورشات</h1>
-          <p>إدارة وتصنيف الأماكن المخصصة للتدريس والتدريب</p>
+          <h1>{lang === 'ar' ? 'إدارة القاعات والورشات' : 'Salles et Ateliers'}</h1>
+          <p>{lang === 'ar' ? 'إدارة وتصنيف الأماكن المخصصة للتدريس والتدريب' : 'Gestion des salles de cours et ateliers pratiques'}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => openModal()}>
-          <Plus size={16} /> إضافة قاعة جديدة
+        <button 
+          className="btn btn-primary" 
+          style={{ padding: '11px 22px', fontSize: '14px', gap: '8px', fontWeight: 600 }}
+          onClick={() => openModal()}
+        >
+          <Plus size={18} /> {lang === 'ar' ? 'إضافة قاعة جديدة' : 'Ajouter une salle'}
         </button>
       </div>
 
       <div className="page-body">
-        <div className="card">
+        <div className="card" style={{ padding: '24px' }}>
           {loading ? (
             <div className="loading-spinner"><div className="spinner" /></div>
           ) : salles.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">🚪</div>
-              <h3>لا توجد قاعات</h3>
-              <p>قم بإضافة القاعات والورشات للبدء</p>
+              <h3>{lang === 'ar' ? 'لا توجد قاعات' : 'Aucune salle'}</h3>
+              <p>{lang === 'ar' ? 'قم بإضافة القاعات والورشات للبدء' : 'Ajoutez des salles et ateliers pour commencer'}</p>
             </div>
           ) : (
             <div className="table-wrapper">
               <table>
                 <thead>
                   <tr>
-                    <th>اسم القاعة / الورشة</th>
-                    <th>النوع</th>
-                    <th style={{ width: 120 }}>الإجراءات</th>
+                    <th>{lang === 'ar' ? 'اسم القاعة / الورشة' : 'Nom de la Salle / Atelier'}</th>
+                    <th style={{ width: 180 }}>{lang === 'ar' ? 'النوع' : 'Type'}</th>
+                    <th style={{ width: 140, textAlign: 'center' }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {salles.map((s) => (
                     <tr key={s.id}>
-                      <td style={{ fontWeight: 600 }}>{s.nom_salle}</td>
+                      <td style={{ fontWeight: 600, fontSize: '15px' }}>{s.nom_salle}</td>
                       <td>
-                        <span className={`badge ${s.type_salle === 'Salle' ? 'badge-salle' : 'badge-atelier'}`}>
-                          {s.type_salle === 'Salle' ? 'قاعة عادية' : 'ورشة عمل'}
+                        <span className={`badge ${s.type_salle === 'Salle' ? 'badge-primary' : 'badge-warning'}`}>
+                          {s.type_salle === 'Salle' 
+                            ? (lang === 'ar' ? 'قاعة عادية' : 'Salle de cours') 
+                            : (lang === 'ar' ? 'ورشة عمل' : 'Atelier')}
                         </span>
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button className="btn btn-secondary btn-icon" onClick={() => openModal(s)}>
-                            <Edit size={14} />
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                          <button 
+                            className="btn btn-secondary btn-icon" 
+                            title={lang === 'ar' ? 'تعديل' : 'Modifier'} 
+                            onClick={() => openModal(s)}
+                          >
+                            <Edit size={16} />
                           </button>
-                          <button className="btn btn-danger btn-icon" onClick={() => handleDelete(s.id!)}>
-                            <Trash2 size={14} />
+                          <button 
+                            className="btn btn-danger btn-icon" 
+                            title={lang === 'ar' ? 'حذف' : 'Supprimer'} 
+                            onClick={() => handleDelete(s.id!)}
+                          >
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>

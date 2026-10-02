@@ -2,11 +2,13 @@ import React, { useState } from 'react'
 import { Search, DoorOpen, UsersRound } from 'lucide-react'
 import { seancesService } from '../services/firebaseService'
 import { JOURS, TIME_SLOTS, type Jour, type HeureDebut } from '../types'
+import { useTranslation } from '../lib/i18n'
 
 export default function VacancesPage(): React.ReactElement {
   const [jour, setJour] = useState<Jour>('Lundi')
   const [heureDebut, setHeureDebut] = useState<HeureDebut>('08:30')
   const [searchType, setSearchType] = useState<'salle' | 'groupe'>('salle')
+  const { lang } = useTranslation()
   
   const [results, setResults] = useState<string[]>([])
   const [hasSearched, setHasSearched] = useState(false)
@@ -37,45 +39,52 @@ export default function VacancesPage(): React.ReactElement {
     <div className="fade-in-up">
       <div className="page-header">
         <div className="page-header-info">
-          <h1>البحث عن الشواغر</h1>
-          <p>البحث عن القاعات الشاغرة أو الأفواج المتاحة في وقت محدد</p>
+          <h1>{lang === 'ar' ? 'البحث عن الشواغر' : 'Recherche des Disponibilités'}</h1>
+          <p>{lang === 'ar' ? 'البحث عن القاعات الشاغرة أو الأفواج المتاحة في وقت محدد' : 'Recherche des salles libres et groupes disponibles par créneau horaire'}</p>
         </div>
       </div>
 
       <div className="page-body">
-        <div className="card" style={{ maxWidth: 600, margin: '0 auto' }}>
+        <div className="card" style={{ maxWidth: 680, margin: '0 auto', padding: '28px' }}>
           <div className="card-header">
-            <h3 className="card-title"><Search size={18} /> محرك البحث</h3>
+            <h3 className="card-title" style={{ fontSize: '17px' }}>
+              <Search size={20} /> {lang === 'ar' ? 'محرك البحث عن الشواغر' : 'Moteur de recherche'}
+            </h3>
           </div>
           
           <form onSubmit={handleSearch}>
             <div className="form-group">
-              <label className="form-label">نوع البحث</label>
+              <label className="form-label" style={{ fontSize: '14px', fontWeight: 600 }}>
+                {lang === 'ar' ? 'نوع البحث' : 'Type de recherche'}
+              </label>
               <div style={{ display: 'flex', gap: 12 }}>
                 <button
                   type="button"
                   className={`btn ${searchType === 'salle' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, padding: '12px 18px', fontSize: '14.5px', fontWeight: 600, gap: '8px' }}
                   onClick={() => { setSearchType('salle'); setHasSearched(false) }}
                 >
-                  <DoorOpen size={16} /> القاعات الشاغرة
+                  <DoorOpen size={18} /> {lang === 'ar' ? 'القاعات الشاغرة' : 'Salles libres'}
                 </button>
                 <button
                   type="button"
                   className={`btn ${searchType === 'groupe' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, padding: '12px 18px', fontSize: '14.5px', fontWeight: 600, gap: '8px' }}
                   onClick={() => { setSearchType('groupe'); setHasSearched(false) }}
                 >
-                  <UsersRound size={16} /> الأفواج المتاحة
+                  <UsersRound size={18} /> {lang === 'ar' ? 'الأفواج المتاحة' : 'Groupes disponibles'}
                 </button>
               </div>
             </div>
 
             <div className="form-row" style={{ marginTop: 20 }}>
               <div className="form-group">
-                <label className="form-label">اليوم</label>
+                <label className="form-label" style={{ fontSize: '14px', fontWeight: 600 }}>
+                  {lang === 'ar' ? 'اليوم' : 'Jour'}
+                </label>
                 <select 
                   className="form-select"
+                  style={{ padding: '11px 14px', fontSize: '14.5px' }}
                   value={jour}
                   onChange={(e) => setJour(e.target.value as Jour)}
                 >
@@ -84,9 +93,12 @@ export default function VacancesPage(): React.ReactElement {
               </div>
               
               <div className="form-group">
-                <label className="form-label">الحصة الزمنية</label>
+                <label className="form-label" style={{ fontSize: '14px', fontWeight: 600 }}>
+                  {lang === 'ar' ? 'الحصة الزمنية' : 'Créneau horaire'}
+                </label>
                 <select 
                   className="form-select"
+                  style={{ padding: '11px 14px', fontSize: '14.5px' }}
                   value={heureDebut}
                   onChange={(e) => setHeureDebut(e.target.value as HeureDebut)}
                 >
@@ -97,8 +109,8 @@ export default function VacancesPage(): React.ReactElement {
               </div>
             </div>
             
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 24, padding: 12 }}>
-              <Search size={16} /> ابحث الآن
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 24, padding: '13px', fontSize: '15px', fontWeight: 600, gap: '8px' }}>
+              <Search size={18} /> {lang === 'ar' ? 'ابحث الآن' : 'Rechercher maintenant'}
             </button>
           </form>
 

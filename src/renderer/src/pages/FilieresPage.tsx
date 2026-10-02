@@ -3,12 +3,14 @@ import { Plus, Trash2, Edit } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { filieresService } from '../services/firebaseService'
 import type { Filiere } from '../types'
+import { useTranslation } from '../lib/i18n'
 
 export default function FilieresPage(): React.ReactElement {
   const [filieres, setFilieres] = useState<Filiere[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const { lang } = useTranslation()
   
   const [codeFiliere, setCodeFiliere] = useState('')
   const [nomFiliere, setNomFiliere] = useState('')
@@ -85,46 +87,58 @@ export default function FilieresPage(): React.ReactElement {
     <div className="fade-in-up">
       <div className="page-header">
         <div className="page-header-info">
-          <h1>إدارة الشعب والتخصصات</h1>
-          <p>إدارة الشعب التدريبية بالمؤسسة (مثال: TEMI, TDI)</p>
+          <h1>{lang === 'ar' ? 'إدارة الشعب والتخصصات' : 'Filières et Spécialités'}</h1>
+          <p>{lang === 'ar' ? 'إدارة الشعب التدريبية بالمؤسسة (مثال: TEMI, TDI)' : 'Gestion des filières de formation (ex: TEMI, TDI)'}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => openModal()}>
-          <Plus size={16} /> إضافة شعبة جديدة
+        <button 
+          className="btn btn-primary" 
+          style={{ padding: '11px 22px', fontSize: '14px', gap: '8px', fontWeight: 600 }}
+          onClick={() => openModal()}
+        >
+          <Plus size={18} /> {lang === 'ar' ? 'إضافة شعبة جديدة' : 'Ajouter une filière'}
         </button>
       </div>
 
       <div className="page-body">
-        <div className="card">
+        <div className="card" style={{ padding: '24px' }}>
           {loading ? (
             <div className="loading-spinner"><div className="spinner" /></div>
           ) : filieres.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">📚</div>
-              <h3>لا توجد شعب مسجلة</h3>
-              <p>قم بإضافة الشعب والتخصصات المتاحة</p>
+              <h3>{lang === 'ar' ? 'لا توجد شعب مسجلة' : 'Aucune filière'}</h3>
+              <p>{lang === 'ar' ? 'قم بإضافة الشعب والتخصصات المتاحة' : 'Ajoutez des filières pour commencer'}</p>
             </div>
           ) : (
             <div className="table-wrapper">
               <table>
                 <thead>
                   <tr>
-                    <th>رمز الشعبة (Code)</th>
-                    <th>اسم الشعبة الكامل</th>
-                    <th style={{ width: 120 }}>الإجراءات</th>
+                    <th style={{ width: 220 }}>{lang === 'ar' ? 'رمز الشعبة (Code)' : 'Code Filière'}</th>
+                    <th>{lang === 'ar' ? 'اسم الشعبة الكامل' : 'Nom Complet de la Filière'}</th>
+                    <th style={{ width: 140, textAlign: 'center' }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filieres.map((f) => (
                     <tr key={f.id}>
                       <td><span className="badge badge-primary">{f.code_filiere}</span></td>
-                      <td style={{ fontWeight: 500 }}>{f.nom_filiere}</td>
+                      <td style={{ fontWeight: 600, fontSize: '15px' }}>{f.nom_filiere}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button className="btn btn-secondary btn-icon" onClick={() => openModal(f)}>
-                            <Edit size={14} />
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                          <button 
+                            className="btn btn-secondary btn-icon" 
+                            title={lang === 'ar' ? 'تعديل' : 'Modifier'} 
+                            onClick={() => openModal(f)}
+                          >
+                            <Edit size={16} />
                           </button>
-                          <button className="btn btn-danger btn-icon" onClick={() => handleDelete(f.id!)}>
-                            <Trash2 size={14} />
+                          <button 
+                            className="btn btn-danger btn-icon" 
+                            title={lang === 'ar' ? 'حذف' : 'Supprimer'} 
+                            onClick={() => handleDelete(f.id!)}
+                          >
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>

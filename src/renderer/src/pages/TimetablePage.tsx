@@ -8,12 +8,14 @@ import {
   groupesService 
 } from '../services/firebaseService'
 import { JOURS, TIME_SLOTS, type Seance, type Formateur, type Salle, type Groupe, type Jour, type HeureDebut, type HeureFin } from '../types'
+import { useTranslation } from '../lib/i18n'
 
 export default function TimetablePage(): React.ReactElement {
   const [seances, setSeances] = useState<Seance[]>([])
   const [formateurs, setFormateurs] = useState<Formateur[]>([])
   const [salles, setSalles] = useState<Salle[]>([])
   const [groupes, setGroupes] = useState<Groupe[]>([])
+  const { lang } = useTranslation()
   
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -153,46 +155,46 @@ export default function TimetablePage(): React.ReactElement {
     <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="page-header">
         <div className="page-header-info">
-          <h1>الجدول الزمني للحصص</h1>
-          <p>تخطيط وبرمجة الحصص الأسبوعية (Emploi du temps)</p>
+          <h1>{lang === 'ar' ? 'الجدول الزمني للحصص' : 'Emploi du Temps'}</h1>
+          <p>{lang === 'ar' ? 'تخطيط وبرمجة الحصص الأسبوعية' : 'Planification et programmation hebdomadaire des séances'}</p>
         </div>
         
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <select 
             className="form-select" 
-            style={{ width: 150 }}
+            style={{ width: 170, padding: '10px 14px', fontSize: '14.5px', fontWeight: 600 }}
             value={viewType}
             onChange={(e) => {
               setViewType(e.target.value as any)
               setSelectedFilterId('')
             }}
           >
-            <option value="global">عرض شامل</option>
-            <option value="formateur">حسب المكون</option>
-            <option value="groupe">حسب الفوج</option>
+            <option value="global">{lang === 'ar' ? 'عرض شامل' : 'Vue Globale'}</option>
+            <option value="formateur">{lang === 'ar' ? 'حسب المكون' : 'Par Formateur'}</option>
+            <option value="groupe">{lang === 'ar' ? 'حسب الفوج' : 'Par Groupe'}</option>
           </select>
 
           {viewType === 'formateur' && (
             <select 
               className="form-select" 
-              style={{ width: 200 }}
+              style={{ width: 220, padding: '10px 14px', fontSize: '14.5px' }}
               value={selectedFilterId}
               onChange={(e) => setSelectedFilterId(e.target.value)}
             >
-              <option value="">-- اختر المكون --</option>
-              {formateurs.map(f => <option key={f.id} value={f.id}>{f.nom_prenom}</option>)}
+              <option value="">{lang === 'ar' ? '-- اختر المكون --' : '-- Choisir le formateur --'}</option>
+              {formateurs.map((f) => <option key={f.id} value={f.id}>{f.nom_prenom}</option>)}
             </select>
           )}
 
           {viewType === 'groupe' && (
             <select 
               className="form-select" 
-              style={{ width: 200 }}
+              style={{ width: 220, padding: '10px 14px', fontSize: '14.5px' }}
               value={selectedFilterId}
               onChange={(e) => setSelectedFilterId(e.target.value)}
             >
-              <option value="">-- اختر الفوج --</option>
-              {groupes.map(g => <option key={g.id} value={g.id}>{g.code_groupe}</option>)}
+              <option value="">{lang === 'ar' ? '-- اختر الفوج --' : '-- Choisir le groupe --'}</option>
+              {groupes.map((g) => <option key={g.id} value={g.id}>{g.code_groupe}</option>)}
             </select>
           )}
         </div>

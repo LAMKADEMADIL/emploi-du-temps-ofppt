@@ -5,7 +5,9 @@
 export interface Formateur {
   id?: string
   matricule: string
-  nom_prenom: string
+  nom_prenom: string   // kept for backward compatibility
+  prenom?: string
+  nom?: string
   createdAt?: Date
 }
 
