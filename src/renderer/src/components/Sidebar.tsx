@@ -2,6 +2,7 @@ import React from 'react'
 import {
   LayoutDashboard,
   Users,
+  Briefcase,
   DoorOpen,
   BookOpen,
   UsersRound,
@@ -30,6 +31,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
   const navItems = [
     { id: 'dashboard' as NavPage, label: 'nav.dashboard', icon: <LayoutDashboard size={22} />, section: 'nav.section.main' },
     { id: 'formateurs' as NavPage, label: 'nav.formateurs', icon: <Users size={22} />, section: 'nav.section.data' },
+    { id: 'stage' as NavPage, label: 'nav.stage', icon: <Briefcase size={22} /> },
     { id: 'salles' as NavPage, label: 'nav.salles', icon: <DoorOpen size={22} /> },
     { id: 'filieres' as NavPage, label: 'nav.filieres', icon: <BookOpen size={22} /> },
     { id: 'groupes' as NavPage, label: 'nav.groupes', icon: <UsersRound size={22} /> },

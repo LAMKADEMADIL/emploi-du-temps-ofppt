@@ -87,6 +87,7 @@ export const TIME_SLOTS: { debut: HeureDebut; fin: HeureFin; label: string }[] =
 export type NavPage =
   | 'dashboard'
   | 'formateurs'
+  | 'stage'
   | 'salles'
   | 'filieres'
   | 'groupes'

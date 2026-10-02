@@ -3,6 +3,7 @@ import './assets/main.css'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import FormateursPage from './pages/FormateursPage'
+import StagePage from './pages/StagePage'
 import SallesPage from './pages/SallesPage'
 import FilieresPage from './pages/FilieresPage'
 import GroupesPage from './pages/GroupesPage'
@@ -55,6 +56,7 @@ function AppContent(): React.ReactElement {
     switch (currentPage) {
       case 'dashboard': return <Dashboard onNavigate={setCurrentPage} />
       case 'formateurs': return <FormateursPage />
+      case 'stage': return <StagePage />
       case 'salles': return <SallesPage />
       case 'filieres': return <FilieresPage />
       case 'groupes': return <GroupesPage />
