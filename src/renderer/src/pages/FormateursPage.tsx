@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Plus, Trash2, Edit, AlertTriangle, FileSpreadsheet, Download, CheckCircle2 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
 import { formateursService } from '../services/firebaseService'
 import type { Formateur } from '../types'
@@ -17,6 +18,16 @@ export default function FormateursPage(): React.ReactElement {
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
 
+  // Confirm delete state
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
+  const [isDeletingAll, setIsDeletingAll] = useState(false)
+
+  // Excel Import state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importedList, setImportedList] = useState<Array<{ matricule: string; nom: string; prenom: string }>>([])
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
 
   useEffect(() => {
     loadFormateurs()
@@ -47,7 +58,6 @@ export default function FormateursPage(): React.ReactElement {
         setPrenom(parts[0] ?? '')
         setNom(parts.slice(1).join(' '))
       }
-      setPhotoUrl(null)
     } else {
       setEditingId(null)
       setMatricule('')
@@ -92,35 +102,271 @@ export default function FormateursPage(): React.ReactElement {
   }
 
   async function handleDelete(id: string): Promise<void> {
-    const confirmMsg = lang === 'ar'
-      ? 'هل أنت متأكد من حذف هذا المكون؟'
-      : 'Êtes-vous sûr de vouloir supprimer ce formateur ?'
-    if (window.confirm(confirmMsg)) {
+    setConfirmDeleteId(id)
+  }
+
+  async function confirmDelete(): Promise<void> {
+    if (!confirmDeleteId) return
+    try {
+      await formateursService.delete(confirmDeleteId)
+      toast.success(lang === 'ar' ? 'تم الحذف بنجاح' : 'Supprimé avec succès')
+      loadFormateurs()
+    } catch {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء الحذف' : 'Erreur lors de la suppression')
+    } finally {
+      setConfirmDeleteId(null)
+    }
+  }
+
+  async function confirmDeleteAllFormateurs(): Promise<void> {
+    setIsDeletingAll(true)
+    try {
+      await formateursService.deleteAll()
+      toast.success(lang === 'ar' ? 'تم حذف جميع الأساتذة بنجاح' : 'Tous les formateurs ont été supprimés avec succès')
+      setConfirmDeleteAll(false)
+      loadFormateurs()
+    } catch {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء مسح الأساتذة' : 'Erreur lors de la suppression')
+    } finally {
+      setIsDeletingAll(false)
+    }
+  }
+
+  // Download Sample Excel Template
+  function downloadTemplate(): void {
+    const wsData = [
+      ['Matricule', 'Nom', 'Prénom'],
+      ['1234501', 'BENALI', 'Ahmed'],
+      ['1234502', 'EL AMRANI', 'Fatima'],
+      ['1234503', 'ALAOUI', 'Youssef']
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(wsData)
+    ws['!cols'] = [{ wch: 18 }, { wch: 22 }, { wch: 22 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Formateurs')
+    XLSX.writeFile(wb, 'modele_import_formateurs.xlsx')
+  }
+
+  // Handle Excel File Selection
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>): void {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
       try {
-        await formateursService.delete(id)
-        toast.success(lang === 'ar' ? 'تم الحذف بنجاح' : 'Supprimé avec succès')
-        loadFormateurs()
-      } catch {
-        toast.error(lang === 'ar' ? 'حدث خطأ أثناء الحذف' : 'Erreur lors de la suppression')
+        const data = new Uint8Array(event.target?.result as ArrayBuffer)
+        const workbook = XLSX.read(data, { type: 'array' })
+        const sheetName = workbook.SheetNames[0]
+        if (!sheetName) {
+          toast.error(lang === 'ar' ? 'الملف فارغ' : 'Le fichier est vide')
+          return
+        }
+        const worksheet = workbook.Sheets[sheetName]
+        const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+
+        if (!rows || rows.length === 0) {
+          toast.error(lang === 'ar' ? 'الملف لا يحتوي على بيانات' : 'Le fichier ne contient aucune donnée')
+          return
+        }
+
+        const firstRow = rows[0].map((c) => String(c ?? '').trim().toLowerCase())
+        let matriculeIdx = 0
+        let nomIdx = 1
+        let prenomIdx = 2
+        let startIdx = 0
+
+        const hasHeader = firstRow.some((cell) =>
+          cell.includes('matr') || cell.includes('mle') || cell.includes('مترك') || cell.includes('تسجيل') || cell.includes('code') ||
+          cell.includes('nom') || cell.includes('نسب') || cell.includes('لقب') || cell.includes('عائل') ||
+          cell.includes('prenom') || cell.includes('prénom') || cell.includes('اسم')
+        )
+
+        if (hasHeader) {
+          startIdx = 1
+          firstRow.forEach((cell, idx) => {
+            if (cell.includes('matr') || cell.includes('mle') || cell.includes('مترك') || cell.includes('تسجيل') || cell.includes('code')) {
+              matriculeIdx = idx
+            } else if (cell.includes('prenom') || cell.includes('prénom') || (cell.includes('اسم') && !cell.includes('نسب') && !cell.includes('عائل') && !cell.includes('لقب'))) {
+              prenomIdx = idx
+            } else if (cell.includes('nom') || cell.includes('نسب') || cell.includes('لقب') || cell.includes('عائل')) {
+              nomIdx = idx
+            }
+          })
+        } else {
+          // Default: col 0 = Matricule, col 1 = Nom (النسب), col 2 = Prénom (الاسم)
+          matriculeIdx = 0
+          nomIdx = 1
+          prenomIdx = 2
+          startIdx = 0
+        }
+
+        const parsed: Array<{ matricule: string; nom: string; prenom: string }> = []
+        for (let i = startIdx; i < rows.length; i++) {
+          const row = rows[i]
+          if (!row || row.length === 0) continue
+          const m = String(row[matriculeIdx] ?? '').trim()
+          const n = String(row[nomIdx] ?? '').trim()
+          const p = String(row[prenomIdx] ?? '').trim()
+          if (!m && !n && !p) continue
+          parsed.push({ matricule: m, nom: n, prenom: p })
+        }
+
+        if (parsed.length === 0) {
+          toast.error(lang === 'ar' ? 'لم يتم العثور على أية صفوف صالحة' : 'Aucune ligne valide trouvée')
+          return
+        }
+
+        setImportedList(parsed)
+        setIsImportModalOpen(true)
+      } catch (err) {
+        console.error(err)
+        toast.error(lang === 'ar' ? 'حدث خطأ أثناء قراءة ملف Excel' : 'Erreur lors de la lecture du fichier Excel')
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
       }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  // Confirm Import to Firebase
+  async function handleConfirmImport(): Promise<void> {
+    if (importedList.length === 0) return
+    setIsImporting(true)
+    try {
+      let added = 0
+      let updated = 0
+
+      for (const item of importedList) {
+        const existing = formateurs.find(
+          (f) => f.matricule.trim().toLowerCase() === item.matricule.trim().toLowerCase()
+        )
+        const nom_prenom = `${item.prenom} ${item.nom}`.trim()
+        const data = {
+          matricule: item.matricule,
+          nom: item.nom,
+          prenom: item.prenom,
+          nom_prenom: nom_prenom || item.matricule
+        }
+
+        if (existing && existing.id) {
+          await formateursService.update(existing.id, data)
+          updated++
+        } else {
+          await formateursService.add(data as Formateur)
+          added++
+        }
+      }
+
+      if (lang === 'ar') {
+        toast.success(`تم استيراد ${added} أستاذ جديد وتحديث ${updated} بنجاح!`)
+      } else {
+        toast.success(`${added} ajouté(s), ${updated} mis à jour avec succès!`)
+      }
+
+      setIsImportModalOpen(false)
+      setImportedList([])
+      await loadFormateurs()
+    } catch (err) {
+      console.error(err)
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء حفظ الأساتذة' : "Erreur lors de l'enregistrement")
+    } finally {
+      setIsImporting(false)
     }
   }
 
   return (
-    <div className="fade-in-up">
+    <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Hidden File Input for Excel */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".xlsx, .xls, .csv"
+        style={{ display: 'none' }}
+        onChange={handleFileSelect}
+      />
+
       {/* Page Header */}
       <div className="page-header">
         <div className="page-header-info">
           <h1>{lang === 'ar' ? 'إدارة المكونين' : 'Gestion des Formateurs'}</h1>
           <p>{lang === 'ar' ? 'إضافة، تعديل، أو حذف بيانات المكونين (الأساتذة)' : 'Ajouter, modifier ou supprimer les formateurs'}</p>
         </div>
-        <button
-          className="btn btn-primary"
-          style={{ padding: '11px 22px', fontSize: '14px', gap: '8px', fontWeight: 600 }}
-          onClick={() => openModal()}
-        >
-          <Plus size={18} /> {lang === 'ar' ? 'إضافة مكون جديد' : 'Ajouter un formateur'}
-        </button>
+
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {/* Delete All Button */}
+          {formateurs.length > 0 && (
+            <button
+              type="button"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '11px 18px',
+                fontSize: '14px',
+                fontWeight: 700,
+                background: 'white',
+                color: '#dc2626',
+                border: '2px solid #ef4444',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 8px rgba(239, 68, 68, 0.08)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#ef4444'
+                e.currentTarget.style.color = 'white'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'white'
+                e.currentTarget.style.color = '#dc2626'
+              }}
+              onClick={() => setConfirmDeleteAll(true)}
+              title={lang === 'ar' ? 'مسح جميع الأساتذة في آن واحد' : 'Supprimer tous les formateurs en un clic'}
+            >
+              <Trash2 size={16} />
+              {lang === 'ar' ? 'مسح الكل' : 'Tout supprimer'}
+            </button>
+          )}
+
+          {/* Import Excel Button */}
+          <button
+            type="button"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '11px 20px',
+              fontSize: '14px',
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              color: 'white',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+            onClick={() => fileInputRef.current?.click()}
+            title={lang === 'ar' ? 'استيراد من حاسوب ملف Excel (رقم التسجيل، النسب، الاسم)' : 'Importer depuis Excel (Matricule, Nom, Prénom)'}
+          >
+            <FileSpreadsheet size={18} />
+            {lang === 'ar' ? 'استيراد من Excel' : 'Importer Excel'}
+          </button>
+
+          {/* Add Teacher Button */}
+          <button
+            className="btn btn-primary"
+            style={{ padding: '11px 22px', fontSize: '14px', gap: '8px', fontWeight: 600 }}
+            onClick={() => openModal()}
+          >
+            <Plus size={18} /> {lang === 'ar' ? 'إضافة مكون جديد' : 'Ajouter un formateur'}
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -163,15 +409,15 @@ export default function FormateursPage(): React.ReactElement {
                         <td style={tdStyle}>
                           <span style={{
                             fontWeight: 700,
-                            color: '#1a1a2e',
-                            fontSize: 15
+                            color: '#0a0a0a',
+                            fontSize: 17
                           }}>{f.matricule}</span>
                         </td>
                         <td style={tdStyle}>
-                          <span style={{ fontSize: 15, color: '#374151' }}>{prenomVal}</span>
+                          <span style={{ fontSize: 17, color: '#0a0a0a', fontWeight: 500 }}>{prenomVal}</span>
                         </td>
                         <td style={tdStyle}>
-                          <span style={{ fontWeight: 600, fontSize: 15, color: '#1a1a2e', textTransform: 'uppercase' }}>{nomVal}</span>
+                          <span style={{ fontWeight: 700, fontSize: 17, color: '#0a0a0a', textTransform: 'uppercase' }}>{nomVal}</span>
                         </td>
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
@@ -291,19 +537,351 @@ export default function FormateursPage(): React.ReactElement {
           </div>
         </div>
       )}
+
+      {/* Confirm Delete Modal */}
+      {confirmDeleteId && (
+        <div className="modal-overlay" onClick={() => setConfirmDeleteId(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400, textAlign: 'center' }}>
+            <div style={{ padding: '32px 24px 24px' }}>
+              {/* Icon */}
+              <div style={{
+                width: 72, height: 72, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 20px',
+                border: '3px solid #fca5a5'
+              }}>
+                <AlertTriangle size={34} color="#dc2626" />
+              </div>
+
+              {/* Title */}
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0a0a0a', marginBottom: 10 }}>
+                {lang === 'ar' ? 'تأكيد الحذف' : 'Confirmer la suppression'}
+              </h3>
+
+              {/* Message */}
+              <p style={{ fontSize: 15, color: '#4b5563', lineHeight: 1.6, marginBottom: 28 }}>
+                {lang === 'ar'
+                  ? 'هل أنت متأكد من حذف هذا المكون؟ لا يمكن التراجع عن هذا الإجراء.'
+                  : 'Êtes-vous sûr de vouloir supprimer ce formateur ? Cette action est irréversible.'}
+              </p>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <button
+                  onClick={confirmDelete}
+                  style={{
+                    padding: '11px 28px', borderRadius: 10, fontWeight: 700,
+                    fontSize: 15, cursor: 'pointer', border: 'none',
+                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    color: 'white', display: 'flex', alignItems: 'center', gap: 8,
+                    boxShadow: '0 4px 12px rgba(239,68,68,0.35)',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.04)')}
+                  onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                >
+                  <Trash2 size={16} />
+                  {lang === 'ar' ? 'نعم، احذف' : 'Oui, supprimer'}
+                </button>
+                <button
+                  onClick={() => setConfirmDeleteId(null)}
+                  style={{
+                    padding: '11px 28px', borderRadius: 10, fontWeight: 700,
+                    fontSize: 15, cursor: 'pointer',
+                    border: '2px solid #e5e7eb',
+                    background: 'white', color: '#374151',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#6b7280'
+                    ;(e.currentTarget as HTMLButtonElement).style.background = '#f9fafb'
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb'
+                    ;(e.currentTarget as HTMLButtonElement).style.background = 'white'
+                  }}
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete All Modal */}
+      {confirmDeleteAll && (
+        <div className="modal-overlay" onClick={() => !isDeletingAll && setConfirmDeleteAll(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, textAlign: 'center' }}>
+            <div style={{ padding: '32px 26px 24px' }}>
+              {/* Icon */}
+              <div style={{
+                width: 76, height: 76, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 20px',
+                border: '3px solid #f87171'
+              }}>
+                <AlertTriangle size={38} color="#b91c1c" />
+              </div>
+
+              {/* Title */}
+              <h3 style={{ fontSize: 21, fontWeight: 800, color: '#0a0a0a', marginBottom: 12 }}>
+                {lang === 'ar' ? 'تأكيد مسح جميع الأساتذة' : 'Supprimer tous les formateurs'}
+              </h3>
+
+              {/* Message */}
+              <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.6, marginBottom: 28 }}>
+                {lang === 'ar'
+                  ? `هل أنت متأكد تماماً من رغبتك في حذف جميع الأساتذة (${formateurs.length} أستاذ) دفعة واحدة؟ هذا الإجراء نهائي ولا يمكن التراجع عنه.`
+                  : `Êtes-vous sûr de vouloir supprimer tous les ${formateurs.length} formateurs en une seule fois ? Cette action est définitive et irréversible.`}
+              </p>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <button
+                  onClick={confirmDeleteAllFormateurs}
+                  disabled={isDeletingAll}
+                  style={{
+                    padding: '12px 28px', borderRadius: 10, fontWeight: 700,
+                    fontSize: 15, cursor: isDeletingAll ? 'not-allowed' : 'pointer', border: 'none',
+                    background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
+                    color: 'white', display: 'flex', alignItems: 'center', gap: 8,
+                    boxShadow: '0 4px 14px rgba(239,68,68,0.4)',
+                    opacity: isDeletingAll ? 0.7 : 1,
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => !isDeletingAll && (e.currentTarget.style.transform = 'scale(1.04)')}
+                  onMouseLeave={e => !isDeletingAll && (e.currentTarget.style.transform = 'scale(1)')}
+                >
+                  <Trash2 size={17} />
+                  {isDeletingAll
+                    ? (lang === 'ar' ? 'جاري المسح...' : 'Suppression en cours...')
+                    : (lang === 'ar' ? `نعم، مسح الكل (${formateurs.length})` : `Oui, tout supprimer (${formateurs.length})`)}
+                </button>
+                <button
+                  onClick={() => setConfirmDeleteAll(false)}
+                  disabled={isDeletingAll}
+                  style={{
+                    padding: '12px 24px', borderRadius: 10, fontWeight: 700,
+                    fontSize: 15, cursor: 'pointer',
+                    border: '2px solid #e5e7eb',
+                    background: 'white', color: '#374151',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#6b7280'
+                    ;(e.currentTarget as HTMLButtonElement).style.background = '#f9fafb'
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb'
+                    ;(e.currentTarget as HTMLButtonElement).style.background = 'white'
+                  }}
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Excel Preview Modal */}
+      {isImportModalOpen && (
+        <div className="modal-overlay" onClick={() => !isImporting && setIsImportModalOpen(false)}>
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 660, width: '95%' }}
+          >
+            <div className="modal-header" style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.25))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#059669', border: '1px solid rgba(16, 185, 129, 0.3)'
+                }}>
+                  <FileSpreadsheet size={24} />
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ fontSize: 20, fontWeight: 800, color: '#0a0a0a', margin: 0 }}>
+                    {lang === 'ar' ? 'معاينة واستيراد ملف Excel' : 'Aperçu et importation Excel'}
+                  </h3>
+                  <p style={{ fontSize: 13, color: '#4b5563', margin: '3px 0 0 0' }}>
+                    {lang === 'ar'
+                      ? `تم العثور على ${importedList.length} أستاذ جاهز للاستيراد`
+                      : `${importedList.length} formateur(s) trouvé(s) dans le fichier`}
+                  </p>
+                </div>
+              </div>
+              <button
+                className="modal-close"
+                disabled={isImporting}
+                onClick={() => setIsImportModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Hint & Template download */}
+            <div style={{
+              background: '#f0fdf4',
+              border: '1.5px solid #bbf7d0',
+              borderRadius: 10,
+              padding: '12px 16px',
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap'
+            }}>
+              <span style={{ fontSize: 13.5, color: '#166534', fontWeight: 700 }}>
+                {lang === 'ar'
+                  ? 'الأعمدة المطلوبة: رقم التسجيل (Matricule) • النسب (Nom) • الاسم (Prénom)'
+                  : 'Colonnes requises : Matricule • Nom • Prénom'}
+              </span>
+              <button
+                type="button"
+                onClick={downloadTemplate}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: '1.5px solid #16a34a',
+                  background: 'white',
+                  color: '#16a34a',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#16a34a'
+                  ;(e.currentTarget as HTMLButtonElement).style.color = 'white'
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLButtonElement).style.background = 'white'
+                  ;(e.currentTarget as HTMLButtonElement).style.color = '#16a34a'
+                }}
+                title={lang === 'ar' ? 'تحميل ملف Excel جاهز بالأعمدة الثلاثة' : 'Télécharger un modèle Excel exemple'}
+              >
+                <Download size={14} />
+                {lang === 'ar' ? 'تحميل نموذج Excel' : 'Télécharger modèle'}
+              </button>
+            </div>
+
+            {/* Table Preview */}
+            <div style={{
+              maxHeight: 280,
+              overflowY: 'auto',
+              border: '1.5px solid #e5e7eb',
+              borderRadius: 10,
+              marginBottom: 20
+            }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr style={{ background: '#f3f4f6', position: 'sticky', top: 0, zIndex: 1 }}>
+                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'center', width: 45 }}>#</th>
+                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'left' }}>{lang === 'ar' ? 'رقم التسجيل' : 'Matricule'}</th>
+                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'left' }}>{lang === 'ar' ? 'النسب' : 'Nom'}</th>
+                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'left' }}>{lang === 'ar' ? 'الاسم' : 'Prénom'}</th>
+                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'center', width: 110 }}>{lang === 'ar' ? 'الحالة' : 'État'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importedList.map((row, idx) => {
+                    const isExisting = formateurs.some(
+                      (f) => f.matricule.trim().toLowerCase() === row.matricule.trim().toLowerCase()
+                    )
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                        <td style={{ padding: '10px 14px', textAlign: 'center', color: '#6b7280', fontSize: 12, fontWeight: 600 }}>{idx + 1}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0a0a0a' }}>{row.matricule || '—'}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0a0a0a', textTransform: 'uppercase' }}>{row.nom || '—'}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600, color: '#0a0a0a' }}>{row.prenom || '—'}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                          {isExisting ? (
+                            <span style={{
+                              fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+                              background: '#fef3c7', color: '#b45309'
+                            }}>
+                              {lang === 'ar' ? 'تحديث' : 'Mise à jour'}
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+                              background: '#dcfce7', color: '#15803d'
+                            }}>
+                              {lang === 'ar' ? 'جديد' : 'Nouveau'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Actions */}
+            <div className="modal-footer" style={{ marginTop: 0, justifyContent: 'flex-end', gap: 12 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={isImporting}
+                onClick={() => setIsImportModalOpen(false)}
+                style={{ padding: '10px 22px', fontSize: 14 }}
+              >
+                {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+              </button>
+              <button
+                type="button"
+                disabled={isImporting}
+                onClick={handleConfirmImport}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 24px',
+                  borderRadius: 'var(--radius-md)',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: isImporting ? 'not-allowed' : 'pointer',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white',
+                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                  opacity: isImporting ? 0.7 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                <CheckCircle2 size={16} />
+                {isImporting
+                  ? (lang === 'ar' ? 'جاري الاستيراد...' : 'Importation en cours...')
+                  : (lang === 'ar' ? `تأكيد استيراد (${importedList.length})` : `Confirmer l'importation (${importedList.length})`)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // Style helpers
 const thStyle: React.CSSProperties = {
-  padding: '14px 20px',
-  fontWeight: 700,
-  fontSize: 15,
-  color: '#1a4d1a',
+  padding: '16px 20px',
+  fontWeight: 800,
+  fontSize: 17,
+  color: '#0a0a0a',
   textAlign: 'left',
-  letterSpacing: 0.3,
-  borderBottom: '2px solid rgba(255,255,255,0.3)'
+  letterSpacing: 0.4,
+  borderBottom: '2px solid rgba(0,0,0,0.15)'
 }
 
 const tdStyle: React.CSSProperties = {

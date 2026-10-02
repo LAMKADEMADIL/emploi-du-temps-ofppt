@@ -38,6 +38,12 @@ export const formateursService = {
 
   async delete(id: string): Promise<void> {
     await deleteDoc(doc(db, 'formateurs', id))
+  },
+
+  async deleteAll(): Promise<void> {
+    const snap = await getDocs(collection(db, 'formateurs'))
+    const promises = snap.docs.map((d) => deleteDoc(d.ref))
+    await Promise.all(promises)
   }
 }
 
