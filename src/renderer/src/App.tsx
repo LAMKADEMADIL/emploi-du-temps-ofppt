@@ -13,10 +13,35 @@ import type { NavPage } from './types'
 import { Toaster, toast } from 'react-hot-toast'
 import { I18nProvider, useTranslation } from './lib/i18n'
 import { seedDemoData } from './lib/seedData'
+import { Menu } from 'lucide-react'
 
 function AppContent(): React.ReactElement {
   const [currentPage, setCurrentPage] = useState<NavPage>('dashboard')
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    const saved = localStorage.getItem('sidebar_open')
+    return saved !== null ? saved === 'true' : true
+  })
   const { lang } = useTranslation()
+
+  const toggleSidebar = (): void => {
+    setSidebarOpen((prev) => {
+      const next = !prev
+      localStorage.setItem('sidebar_open', String(next))
+      return next
+    })
+  }
+
+  // Keyboard shortcut Ctrl+B / Cmd+B to toggle sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        toggleSidebar()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   useEffect(() => {
     seedDemoData().then((seeded) => {
@@ -41,7 +66,7 @@ function AppContent(): React.ReactElement {
   }
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${!sidebarOpen ? 'sidebar-is-collapsed' : ''}`}>
       <Toaster
         position={lang === 'ar' ? 'bottom-left' : 'bottom-right'}
         toastOptions={{
@@ -57,10 +82,26 @@ function AppContent(): React.ReactElement {
           }
         }}
       />
+      {!sidebarOpen && (
+        <button
+          className="sidebar-floating-toggle-btn"
+          onClick={toggleSidebar}
+          title={lang === 'ar' ? 'إظهار القائمة (Ctrl+B)' : 'Afficher le menu (Ctrl+B)'}
+          aria-label="Open sidebar"
+        >
+          <Menu size={18} />
+          <span>{lang === 'ar' ? 'القائمة' : 'Menu'}</span>
+        </button>
+      )}
       <main className="main-content">
         {renderPage()}
       </main>
-      <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
+      <Sidebar
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        isOpen={sidebarOpen}
+        onToggle={toggleSidebar}
+      />
     </div>
   )
 }
