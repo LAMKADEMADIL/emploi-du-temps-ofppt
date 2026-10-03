@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import FormateursPage from './pages/FormateursPage'
 import StagePage from './pages/StagePage'
 import DnaPage from './pages/DnaPage'
+import SalleGridPage from './pages/SalleGridPage'
 import SallesPage from './pages/SallesPage'
 import FilieresPage from './pages/FilieresPage'
 import GroupesPage from './pages/GroupesPage'
@@ -59,6 +60,7 @@ function AppContent(): React.ReactElement {
       case 'formateurs': return <FormateursPage />
       case 'stage': return <StagePage />
       case 'dna': return <DnaPage />
+      case 'salle_grid': return <SalleGridPage />
       case 'salles': return <SallesPage />
       case 'filieres': return <FilieresPage />
       case 'groupes': return <GroupesPage />

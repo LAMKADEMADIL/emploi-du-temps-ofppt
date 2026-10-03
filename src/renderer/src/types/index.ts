@@ -90,6 +90,7 @@ export type NavPage =
   | 'formateurs'
   | 'stage'
   | 'dna'
+  | 'salle_grid'
   | 'salles'
   | 'filieres'
   | 'groupes'

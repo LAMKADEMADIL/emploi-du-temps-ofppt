@@ -340,7 +340,7 @@ export default function DnaPage(): React.ReactElement {
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                           <span style={{ fontSize: 15, fontWeight: 800, color: '#0a0a0a' }}>
-                            {formateur.nom || formateur.nom_prenom}
+                            {formateur.nom_prenom}
                           </span>
                           <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>
                             {(formateur.groupes_assignes?.length || 0)} {lang === 'ar' ? 'مجموعات' : 'groupes'}
