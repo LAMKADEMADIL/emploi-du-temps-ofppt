@@ -8,6 +8,7 @@ export interface Formateur {
   nom_prenom: string   // kept for backward compatibility
   prenom?: string
   nom?: string
+  groupes_assignes?: string[] // Array of group codes or IDs assigned to this formateur
   createdAt?: Date
 }
 
@@ -88,6 +89,7 @@ export type NavPage =
   | 'dashboard'
   | 'formateurs'
   | 'stage'
+  | 'dna'
   | 'salles'
   | 'filieres'
   | 'groupes'
