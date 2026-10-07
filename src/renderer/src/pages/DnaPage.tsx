@@ -301,7 +301,8 @@ export default function DnaPage(): React.ReactElement {
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Clear All Button */}
+
+          {/* Vider le tableau Button */}
           {formateurs.length > 0 && (
             <button
               type="button"
@@ -315,29 +316,29 @@ export default function DnaPage(): React.ReactElement {
                 fontSize: '14px',
                 fontWeight: 700,
                 background: 'white',
-                color: '#dc2626',
-                border: '2px solid #ef4444',
+                color: '#d97706',
+                border: '2px solid #f59e0b',
                 borderRadius: 'var(--radius-md)',
                 cursor: isClearing ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 8px rgba(239, 68, 68, 0.08)'
+                boxShadow: '0 2px 8px rgba(245, 158, 11, 0.08)'
               }}
               onMouseEnter={(e) => {
                 if (!isClearing) {
-                  e.currentTarget.style.background = '#ef4444'
+                  e.currentTarget.style.background = '#f59e0b'
                   e.currentTarget.style.color = 'white'
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isClearing) {
                   e.currentTarget.style.background = 'white'
-                  e.currentTarget.style.color = '#dc2626'
+                  e.currentTarget.style.color = '#d97706'
                 }
               }}
-              title={lang === 'ar' ? 'مسح بيانات هذه الصفحة' : 'Effacer les données de cette page'}
+              title={lang === 'ar' ? 'تفريغ كل الجدول' : 'Vider le tableau'}
             >
               <Trash2 size={16} />
-              {lang === 'ar' ? 'مسح كل الصفحة' : 'Tout effacer'}
+              {lang === 'ar' ? 'تفريغ الجدول' : 'Vider le tableau'}
             </button>
           )}
 
@@ -457,50 +458,11 @@ export default function DnaPage(): React.ReactElement {
                           transition: 'all 0.2s'
                         }}
                       >
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                          <div style={{ width: 28, height: 4, borderRadius: 2, background: getProfColor(idx), marginBottom: 2 }} />
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
-                            <span style={{ fontSize: 15, fontWeight: 800, color: '#0a0a0a' }}>
-                              {formateur.nom_prenom}
-                            </span>
-                            {formateur.id && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setDeleteFormateurId(formateur.id!)
-                                }}
-                                style={{
-                                  border: 'none',
-                                  background: 'transparent',
-                                  color: '#dc2626',
-                                  cursor: 'pointer',
-                                  padding: 3,
-                                  borderRadius: 4,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  opacity: 0.5,
-                                  transition: 'all 0.15s'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.opacity = '1'
-                                  e.currentTarget.style.background = '#fee2e2'
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.opacity = '0.5'
-                                  e.currentTarget.style.background = 'transparent'
-                                }}
-                                title={lang === 'ar' ? 'حذف هذا المكون' : 'Supprimer ce formateur'}
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
-                          </div>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>
-                            {(formateur.groupes_assignes?.length || 0)} {lang === 'ar' ? 'مجموعات' : 'groupes'}
-                          </span>
-                        </div>
+                        <span style={{ fontSize: 15, fontWeight: 800, color: '#0a0a0a', letterSpacing: 0.3 }}>
+                          {formateur.nom
+                            ? formateur.nom
+                            : ((formateur.nom_prenom ?? '').split(' ').slice(1).join(' ') || formateur.nom_prenom || formateur.matricule)}
+                        </span>
                       </th>
                     ))}
                   </tr>
@@ -633,33 +595,6 @@ export default function DnaPage(): React.ReactElement {
                   {lang === 'ar' ? 'مسح التعيينات فقط (تفريغ الخانات)' : 'Vider les affectations uniquement'}
                 </button>
 
-                {/* Option 2: Delete all formateurs (complete wipe) */}
-                <button
-                  type="button"
-                  onClick={handleDeleteAllFormateurs}
-                  disabled={isClearing}
-                  style={{
-                    padding: '12px 18px',
-                    borderRadius: 10,
-                    fontWeight: 700,
-                    fontSize: 14.5,
-                    cursor: isClearing ? 'not-allowed' : 'pointer',
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    boxShadow: '0 4px 12px rgba(239,68,68,0.3)',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => !isClearing && (e.currentTarget.style.transform = 'scale(1.02)')}
-                  onMouseLeave={(e) => !isClearing && (e.currentTarget.style.transform = 'scale(1)')}
-                >
-                  <Trash2 size={16} />
-                  {lang === 'ar' ? 'مسح شامل وحذف المكونين' : 'Tout supprimer (Formateurs & affectations)'}
-                </button>
               </div>
 
               <button
