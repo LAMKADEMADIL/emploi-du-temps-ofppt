@@ -154,7 +154,19 @@ export default function SalleGridPage(): React.ReactElement {
   const filteredFormateurs = formateurs.filter(f =>
     f.nom_prenom.toLowerCase().includes(searchF.toLowerCase())
   )
-  const filteredGroupes = groupes.filter(g =>
+
+  // When a formateur is selected, filter groups to only show his filière groups
+  // e.g. groupes_assignes = ['TEMI100','TEMI200'] → show TEMI101, TEMI102, TEMI103...
+  const selectedFormateur = modalFormateur ? formateurs.find(f => f.id === modalFormateur) : null
+  const assignedPrefixes: string[] = selectedFormateur?.groupes_assignes
+    ?.map(code => code.replace(/\d+$/, '').trim()) // 'TEMI100' → 'TEMI'
+    .filter(Boolean) ?? []
+
+  const groupesForFormateur = (assignedPrefixes.length > 0)
+    ? groupes.filter(g => assignedPrefixes.some(prefix => g.code_groupe.startsWith(prefix)))
+    : groupes // show all if no formateur selected or no assignments
+
+  const filteredGroupes = groupesForFormateur.filter(g =>
     g.code_groupe.toLowerCase().includes(searchG.toLowerCase())
   )
 
