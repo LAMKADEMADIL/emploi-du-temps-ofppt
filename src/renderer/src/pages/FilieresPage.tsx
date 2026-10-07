@@ -118,18 +118,18 @@ export default function FilieresPage(): React.ReactElement {
               <table>
                 <thead>
                   <tr>
-                    <th style={{ width: 160 }}>{lang === 'ar' ? 'رمز الشعبة (Code)' : 'Code Filière'}</th>
-                    <th>{lang === 'ar' ? 'اسم الشعبة الكامل' : 'Nom Complet de la Filière'}</th>
-                    <th style={{ width: 140, textAlign: 'center' }}>{lang === 'ar' ? 'مدة التكوين' : 'Durée'}</th>
-                    <th style={{ width: 140, textAlign: 'center' }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
+                    <th style={{ width: 160, fontSize: '15px', color: '#4b5563' }}>{lang === 'ar' ? 'رمز الشعبة (Code)' : 'Code Filière'}</th>
+                    <th style={{ fontSize: '15px', color: '#4b5563' }}>{lang === 'ar' ? 'اسم الشعبة الكامل' : 'Nom Complet de la Filière'}</th>
+                    <th style={{ width: 140, textAlign: 'center', fontSize: '15px', color: '#4b5563' }}>{lang === 'ar' ? 'مدة التكوين' : 'Durée'}</th>
+                    <th style={{ width: 140, textAlign: 'center', fontSize: '15px', color: '#4b5563' }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filieres.map((f) => (
                     <tr key={f.id}>
-                      <td><span className="badge badge-primary">{f.code_filiere}</span></td>
-                      <td style={{ fontWeight: 600, fontSize: '15px' }}>{f.nom_filiere}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#4b5563' }}>
+                      <td><span className="badge badge-primary" style={{ fontSize: '16px', fontWeight: 700, padding: '6px 12px' }}>{f.code_filiere}</span></td>
+                      <td style={{ fontWeight: 700, fontSize: '17px', color: '#111827' }}>{f.nom_filiere}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, fontSize: '16px', color: '#1f2937' }}>
                         {f.nombre_annees || 2} {lang === 'ar' ? 'سنوات' : 'Ans'}
                       </td>
                       <td>
