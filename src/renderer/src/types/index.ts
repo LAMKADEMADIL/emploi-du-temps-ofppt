@@ -89,6 +89,7 @@ export type NavPage =
   | 'dashboard'
   | 'formateurs'
   | 'stage'
+  | 'dn'
   | 'dna'
   | 'salle_grid'
   | 'salles'

@@ -14,7 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Network,
-  Grid3X3
+  Grid3X3,
+  Database
 } from 'lucide-react'
 import type { NavPage } from '../types'
 import { useTranslation } from '../lib/i18n'
@@ -34,6 +35,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
     { id: 'dashboard' as NavPage, label: 'nav.dashboard', icon: <LayoutDashboard size={22} />, section: 'nav.section.main' },
     { id: 'formateurs' as NavPage, label: 'nav.formateurs', icon: <Users size={22} />, section: 'nav.section.data' },
     { id: 'stage' as NavPage, label: 'nav.stage', icon: <Briefcase size={22} /> },
+    { id: 'dn' as NavPage, label: 'nav.dn', icon: <Database size={22} /> },
     { id: 'dna' as NavPage, label: 'nav.dna', icon: <Network size={22} /> },
     { id: 'salle_grid' as NavPage, label: 'nav.salle_grid', icon: <Grid3X3 size={22} /> },
     { id: 'salles' as NavPage, label: 'nav.salles', icon: <DoorOpen size={22} /> },

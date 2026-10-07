@@ -4,23 +4,38 @@ import {
   FileSpreadsheet,
   Download,
   Search,
-  Users
+  Users,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
-import { formateursService } from '../services/firebaseService'
-import type { Formateur } from '../types'
+import { formateursService, groupesService } from '../services/firebaseService'
+import type { Formateur, Groupe } from '../types'
 import { useTranslation } from '../lib/i18n'
 
 export default function DnaPage(): React.ReactElement {
   const { lang } = useTranslation()
   const [formateurs, setFormateurs] = useState<Formateur[]>([])
+  const [groupes, setGroupes] = useState<Groupe[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Predefined aesthetic colors for professors
+  const PROF_COLORS = [
+    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', 
+    '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#6366f1'
+  ]
+  const getProfColor = (idx: number) => PROF_COLORS[idx % PROF_COLORS.length]
 
   // Excel import
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
+
+  // Clear / Delete state
+  const [confirmClearModal, setConfirmClearModal] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
+  const [deleteFormateurId, setDeleteFormateurId] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -29,8 +44,13 @@ export default function DnaPage(): React.ReactElement {
   async function loadData(): Promise<void> {
     try {
       setLoading(true)
-      const formateursData = await formateursService.getAll()
+      const [formateursData, groupesData] = await Promise.all([
+        formateursService.getAll(),
+        groupesService.getAll()
+      ])
       setFormateurs(formateursData)
+      // Sort groups alphabetically
+      setGroupes(groupesData.sort((a, b) => a.code_groupe.localeCompare(b.code_groupe)))
     } catch (err) {
       console.error(err)
       toast.error(lang === 'ar' ? 'حدث خطأ أثناء تحميل البيانات' : 'Erreur lors du chargement des données')
@@ -150,27 +170,86 @@ export default function DnaPage(): React.ReactElement {
   }
 
   // Handle manual cell edit
-  function handleCellChange(formateurId: string | undefined, rowIndex: number, value: string) {
-    if (!formateurId) return
+  async function handleCellChange(formateur: Formateur, rowIndex: number, value: string) {
+    if (!formateur.id) return
+    
+    // Optimistic UI update
     setFormateurs(prev => prev.map(f => {
-      if (f.id === formateurId) {
+      if (f.id === formateur.id) {
         const newGroupes = [...(f.groupes_assignes || [])]
         newGroupes[rowIndex] = value
         return { ...f, groupes_assignes: newGroupes }
       }
       return f
     }))
-  }
 
-  async function handleCellBlur(formateur: Formateur) {
-    if (!formateur.id) return
-    // Clean up empty strings, keeping order
-    const cleaned = (formateur.groupes_assignes || []).filter(g => g.trim() !== '')
+    // Save to DB
+    const newGroupesToSave = [...(formateur.groupes_assignes || [])]
+    newGroupesToSave[rowIndex] = value
+    const cleaned = newGroupesToSave.filter(g => g.trim() !== '')
+    
     try {
       await formateursService.update(formateur.id, { groupes_assignes: cleaned })
     } catch (err) {
       console.error(err)
       toast.error(lang === 'ar' ? 'فشل الحفظ التلقائي' : 'Erreur de sauvegarde automatique')
+    }
+  }
+
+  // Clear all group assignments (empty all cells on this page)
+  async function handleClearAllAssignments(): Promise<void> {
+    try {
+      setIsClearing(true)
+      const promises = formateurs.map((f) => {
+        if (!f.id) return Promise.resolve()
+        return formateursService.update(f.id, { groupes_assignes: [] })
+      })
+      await Promise.all(promises)
+      toast.success(
+        lang === 'ar'
+          ? 'تم مسح جميع تعيينات المجموعات بنجاح!'
+          : 'Toutes les affectations ont été effacées avec succès !'
+      )
+      setConfirmClearModal(false)
+      await loadData()
+    } catch (err) {
+      console.error(err)
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء مسح التعيينات' : 'Erreur lors de la réinitialisation')
+    } finally {
+      setIsClearing(false)
+    }
+  }
+
+  // Delete all formateurs (complete wipe)
+  async function handleDeleteAllFormateurs(): Promise<void> {
+    try {
+      setIsClearing(true)
+      await formateursService.deleteAll()
+      toast.success(
+        lang === 'ar'
+          ? 'تم مسح جميع المكونين والتعيينات بنجاح!'
+          : 'Tous les formateurs et affectations ont été supprimés !'
+      )
+      setConfirmClearModal(false)
+      await loadData()
+    } catch (err) {
+      console.error(err)
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء الحذف' : 'Erreur lors de la suppression')
+    } finally {
+      setIsClearing(false)
+    }
+  }
+
+  // Delete a single formateur column
+  async function handleDeleteSingleFormateur(id: string): Promise<void> {
+    try {
+      await formateursService.delete(id)
+      toast.success(lang === 'ar' ? 'تم حذف المكون بنجاح' : 'Formateur supprimé avec succès')
+      setDeleteFormateurId(null)
+      await loadData()
+    } catch (err) {
+      console.error(err)
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء الحذف' : 'Erreur lors de la suppression')
     }
   }
 
@@ -222,6 +301,46 @@ export default function DnaPage(): React.ReactElement {
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Clear All Button */}
+          {formateurs.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setConfirmClearModal(true)}
+              disabled={isImporting || isClearing}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '11px 18px',
+                fontSize: '14px',
+                fontWeight: 700,
+                background: 'white',
+                color: '#dc2626',
+                border: '2px solid #ef4444',
+                borderRadius: 'var(--radius-md)',
+                cursor: isClearing ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 8px rgba(239, 68, 68, 0.08)'
+              }}
+              onMouseEnter={(e) => {
+                if (!isClearing) {
+                  e.currentTarget.style.background = '#ef4444'
+                  e.currentTarget.style.color = 'white'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isClearing) {
+                  e.currentTarget.style.background = 'white'
+                  e.currentTarget.style.color = '#dc2626'
+                }
+              }}
+              title={lang === 'ar' ? 'مسح بيانات هذه الصفحة' : 'Effacer les données de cette page'}
+            >
+              <Trash2 size={16} />
+              {lang === 'ar' ? 'مسح كل الصفحة' : 'Tout effacer'}
+            </button>
+          )}
+
           {/* Import Excel DNA */}
           <button
             type="button"
@@ -332,16 +451,52 @@ export default function DnaPage(): React.ReactElement {
                           width: 130,
                           textAlign: 'center',
                           borderRight: '1.5px solid #d1d5db',
-                          borderBottom: '2px solid #d1d5db',
+                          borderBottom: `3px solid ${getProfColor(idx)}`,
                           background: 'linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%)',
                           color: '#0a0a0a',
                           transition: 'all 0.2s'
                         }}
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                          <span style={{ fontSize: 15, fontWeight: 800, color: '#0a0a0a' }}>
-                            {formateur.nom_prenom}
-                          </span>
+                          <div style={{ width: 28, height: 4, borderRadius: 2, background: getProfColor(idx), marginBottom: 2 }} />
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
+                            <span style={{ fontSize: 15, fontWeight: 800, color: '#0a0a0a' }}>
+                              {formateur.nom_prenom}
+                            </span>
+                            {formateur.id && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setDeleteFormateurId(formateur.id!)
+                                }}
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#dc2626',
+                                  cursor: 'pointer',
+                                  padding: 3,
+                                  borderRadius: 4,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  opacity: 0.5,
+                                  transition: 'all 0.15s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.opacity = '1'
+                                  e.currentTarget.style.background = '#fee2e2'
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.opacity = '0.5'
+                                  e.currentTarget.style.background = 'transparent'
+                                }}
+                                title={lang === 'ar' ? 'حذف هذا المكون' : 'Supprimer ce formateur'}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
                           <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>
                             {(formateur.groupes_assignes?.length || 0)} {lang === 'ar' ? 'مجموعات' : 'groupes'}
                           </span>
@@ -366,34 +521,43 @@ export default function DnaPage(): React.ReactElement {
                               borderBottom: '1px solid #e5e7eb'
                             }}
                           >
-                            <input
-                              type="text"
+                            <select
                               value={groupeCode}
-                              onChange={(e) => handleCellChange(formateur.id, rIdx, e.target.value)}
-                              onBlur={() => handleCellBlur(formateur)}
-                              placeholder="-"
+                              onChange={(e) => handleCellChange(formateur, rIdx, e.target.value)}
                               style={{
                                 width: '100%',
                                 textAlign: 'center',
+                                textAlignLast: 'center',
                                 border: '1px solid transparent',
                                 background: 'transparent',
                                 fontSize: 14,
                                 fontWeight: groupeCode ? 700 : 400,
-                                color: groupeCode ? '#1f2937' : '#9ca3af',
+                                color: groupeCode ? getProfColor(cIdx) : '#9ca3af',
                                 outline: 'none',
-                                padding: '4px'
+                                padding: '4px',
+                                cursor: 'pointer',
+                                borderRadius: '4px',
+                                transition: 'all 0.2s',
+                                appearance: 'none'
                               }}
                               onFocus={(e) => {
-                                e.currentTarget.style.border = '1px solid #3b82f6'
+                                e.currentTarget.style.border = `1px solid ${getProfColor(cIdx)}`
                                 e.currentTarget.style.background = '#ffffff'
-                                e.currentTarget.style.borderRadius = '4px'
+                                e.currentTarget.style.boxShadow = `0 0 0 2px ${getProfColor(cIdx)}20`
                               }}
                               onBlur={(e) => {
                                 e.currentTarget.style.border = '1px solid transparent'
                                 e.currentTarget.style.background = 'transparent'
-                                handleCellBlur(formateur)
+                                e.currentTarget.style.boxShadow = 'none'
                               }}
-                            />
+                            >
+                              <option value="" style={{ color: '#9ca3af' }}>-</option>
+                              {groupes.map(g => (
+                                <option key={g.id} value={g.code_groupe} style={{ color: '#1f2937' }}>
+                                  {g.code_groupe}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                         )
                       })}
@@ -405,6 +569,169 @@ export default function DnaPage(): React.ReactElement {
           )}
         </div>
       </div>
+
+      {/* Confirm Clear Page Modal */}
+      {confirmClearModal && (
+        <div className="modal-overlay" onClick={() => !isClearing && setConfirmClearModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, textAlign: 'center' }}>
+            <div style={{ padding: '32px 24px 24px' }}>
+              <div style={{
+                width: 76, height: 76, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 20px',
+                border: '3px solid #fca5a5'
+              }}>
+                <AlertTriangle size={36} color="#dc2626" />
+              </div>
+
+              <h3 style={{ fontSize: 21, fontWeight: 800, color: '#0a0a0a', marginBottom: 10 }}>
+                {lang === 'ar' ? 'مسح بيانات صفحة DNA' : 'Nettoyer la page DNA'}
+              </h3>
+
+              <p style={{ fontSize: 14.5, color: '#4b5563', lineHeight: 1.6, marginBottom: 24 }}>
+                {lang === 'ar'
+                  ? 'اختر نوع المسح الذي ترغب في تطبيقه على هذه الصفحة:'
+                  : 'Choisissez le type de nettoyage que vous souhaitez appliquer :'}
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                {/* Option 1: Clear assignments only */}
+                <button
+                  type="button"
+                  onClick={handleClearAllAssignments}
+                  disabled={isClearing}
+                  style={{
+                    padding: '12px 18px',
+                    borderRadius: 10,
+                    fontWeight: 700,
+                    fontSize: 14.5,
+                    cursor: isClearing ? 'not-allowed' : 'pointer',
+                    border: '2px solid #f59e0b',
+                    background: '#fffbeb',
+                    color: '#b45309',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isClearing) {
+                      e.currentTarget.style.background = '#f59e0b'
+                      e.currentTarget.style.color = 'white'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isClearing) {
+                      e.currentTarget.style.background = '#fffbeb'
+                      e.currentTarget.style.color = '#b45309'
+                    }
+                  }}
+                >
+                  <Trash2 size={16} />
+                  {lang === 'ar' ? 'مسح التعيينات فقط (تفريغ الخانات)' : 'Vider les affectations uniquement'}
+                </button>
+
+                {/* Option 2: Delete all formateurs (complete wipe) */}
+                <button
+                  type="button"
+                  onClick={handleDeleteAllFormateurs}
+                  disabled={isClearing}
+                  style={{
+                    padding: '12px 18px',
+                    borderRadius: 10,
+                    fontWeight: 700,
+                    fontSize: 14.5,
+                    cursor: isClearing ? 'not-allowed' : 'pointer',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    boxShadow: '0 4px 12px rgba(239,68,68,0.3)',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => !isClearing && (e.currentTarget.style.transform = 'scale(1.02)')}
+                  onMouseLeave={(e) => !isClearing && (e.currentTarget.style.transform = 'scale(1)')}
+                >
+                  <Trash2 size={16} />
+                  {lang === 'ar' ? 'مسح شامل وحذف المكونين' : 'Tout supprimer (Formateurs & affectations)'}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setConfirmClearModal(false)}
+                disabled={isClearing}
+                style={{
+                  padding: '10px 24px',
+                  borderRadius: 10,
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  border: '2px solid #e5e7eb',
+                  background: 'white',
+                  color: '#4b5563',
+                  transition: 'all 0.2s',
+                  width: '100%'
+                }}
+              >
+                {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Single Formateur Modal */}
+      {deleteFormateurId && (
+        <div className="modal-overlay" onClick={() => setDeleteFormateurId(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400, textAlign: 'center' }}>
+            <div style={{ padding: '30px 24px 24px' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: '#fee2e2',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 16px',
+                border: '2px solid #fca5a5'
+              }}>
+                <Trash2 size={30} color="#dc2626" />
+              </div>
+              <h3 style={{ fontSize: 19, fontWeight: 800, color: '#0a0a0a', marginBottom: 8 }}>
+                {lang === 'ar' ? 'حذف هذا المكون' : 'Supprimer ce formateur'}
+              </h3>
+              <p style={{ fontSize: 14, color: '#4b5563', marginBottom: 24 }}>
+                {lang === 'ar' ? 'هل أنت متأكد من حذف هذا العمود وتعييناته؟' : 'Voulez-vous vraiment supprimer cette colonne et ses affectations ?'}
+              </p>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSingleFormateur(deleteFormateurId)}
+                  style={{
+                    padding: '10px 22px', borderRadius: 8, fontWeight: 700,
+                    background: '#dc2626', color: 'white', border: 'none', cursor: 'pointer'
+                  }}
+                >
+                  {lang === 'ar' ? 'نعم، احذف' : 'Oui, supprimer'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteFormateurId(null)}
+                  style={{
+                    padding: '10px 22px', borderRadius: 8, fontWeight: 700,
+                    border: '1.5px solid #d1d5db', background: 'white', color: '#374151', cursor: 'pointer'
+                  }}
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

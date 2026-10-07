@@ -35,6 +35,7 @@ export const translations: Translations = {
   'nav.dashboard': { ar: 'لوحة القيادة', fr: 'Tableau de bord' },
   'nav.formateurs': { ar: 'المكونون', fr: 'Formateurs' },
   'nav.stage': { ar: 'التدريب (Stage)', fr: 'Stages en entreprise' },
+  'nav.dn': { ar: 'بنية الشعب (DN)', fr: 'Structure (DN)' },
   'nav.dna': { ar: 'إسناد المجموعات (DNA)', fr: 'Affectations (DNA)' },
   'nav.salle_grid': { ar: 'جدول القاعات (Salle)', fr: 'Planning Salles' },
   'nav.salles': { ar: 'إدارة القاعات', fr: 'Gestion des Salles' },

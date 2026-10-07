@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import FormateursPage from './pages/FormateursPage'
 import StagePage from './pages/StagePage'
+import DnPage from './pages/DnPage'
 import DnaPage from './pages/DnaPage'
 import SalleGridPage from './pages/SalleGridPage'
 import SallesPage from './pages/SallesPage'
@@ -15,7 +16,7 @@ import ExportPage from './pages/ExportPage'
 import type { NavPage } from './types'
 import { Toaster, toast } from 'react-hot-toast'
 import { I18nProvider, useTranslation } from './lib/i18n'
-import { seedDemoData } from './lib/seedData'
+import { seedDemoData, migrateSalles } from './lib/seedData'
 import { Menu } from 'lucide-react'
 
 function AppContent(): React.ReactElement {
@@ -47,6 +48,9 @@ function AppContent(): React.ReactElement {
   }, [])
 
   useEffect(() => {
+    // أولاً: ترحيل القاعات القديمة تلقائياً
+    migrateSalles()
+    // ثانياً: تحميل البيانات التجريبية إن لم تكن موجودة
     seedDemoData().then((seeded) => {
       if (seeded) {
         toast.success(lang === 'ar' ? '✅ تم تحميل البيانات التجريبية!' : '✅ Données de démonstration chargées!')
@@ -59,6 +63,7 @@ function AppContent(): React.ReactElement {
       case 'dashboard': return <Dashboard onNavigate={setCurrentPage} />
       case 'formateurs': return <FormateursPage />
       case 'stage': return <StagePage />
+      case 'dn': return <DnPage />
       case 'dna': return <DnaPage />
       case 'salle_grid': return <SalleGridPage />
       case 'salles': return <SallesPage />

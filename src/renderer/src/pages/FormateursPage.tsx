@@ -375,10 +375,45 @@ export default function FormateursPage(): React.ReactElement {
           {loading ? (
             <div className="loading-spinner" style={{ padding: 40 }}><div className="spinner" /></div>
           ) : formateurs.length === 0 ? (
-            <div className="empty-state" style={{ padding: 60 }}>
-              <div className="empty-state-icon">👥</div>
-              <h3>{lang === 'ar' ? 'لا يوجد مكونون' : 'Aucun formateur'}</h3>
-              <p>{lang === 'ar' ? 'قم بإضافة المكونين للبدء في استخدام النظام' : 'Ajoutez des formateurs pour commencer'}</p>
+            <div className="empty-state" style={{ padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div className="empty-state-icon" style={{ fontSize: 48, marginBottom: 16 }}>👥</div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+                {lang === 'ar' ? 'لا يوجد مكونون' : 'Aucun formateur'}
+              </h3>
+              <p style={{ fontSize: 15, color: '#6b7280', marginBottom: 24, maxWidth: 460, textAlign: 'center', lineHeight: 1.6 }}>
+                {lang === 'ar'
+                  ? 'قم بإضافة المكونين يدوياً أو استيرادهم مباشرة من ملف Excel للبدء'
+                  : 'Ajoutez des formateurs manuellement ou importez-les directement depuis un fichier Excel'}
+              </p>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button
+                  className="btn btn-primary"
+                  style={{ padding: '10px 20px', fontSize: '14px', gap: '8px' }}
+                  onClick={() => openModal()}
+                >
+                  <Plus size={16} /> {lang === 'ar' ? 'إضافة مكون' : 'Ajouter un formateur'}
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <FileSpreadsheet size={16} />
+                  {lang === 'ar' ? 'استيراد من Excel' : 'Importer Excel'}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="table-wrapper" style={{ margin: 0 }}>

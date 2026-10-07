@@ -52,7 +52,7 @@ export const formateursService = {
 // ============================
 export const sallesService = {
   async getAll(): Promise<Salle[]> {
-    const q = query(collection(db, 'salles'), orderBy('nom_salle'))
+    const q = query(collection(db, 'salles'), orderBy('createdAt'))
     const snap = await getDocs(q)
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Salle))
   },
@@ -71,6 +71,12 @@ export const sallesService = {
 
   async delete(id: string): Promise<void> {
     await deleteDoc(doc(db, 'salles', id))
+  },
+
+  async deleteAll(): Promise<void> {
+    const snap = await getDocs(collection(db, 'salles'))
+    const promises = snap.docs.map((d) => deleteDoc(d.ref))
+    await Promise.all(promises)
   }
 }
 
