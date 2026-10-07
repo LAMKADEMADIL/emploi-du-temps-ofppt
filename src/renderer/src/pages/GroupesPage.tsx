@@ -44,7 +44,7 @@ export default function GroupesPage(): React.ReactElement {
     }
   }
 
-  function openModal(groupe?: Groupe) {
+  function openModal(groupe?: Groupe, defaultFiliereId?: string, defaultCode?: string) {
     if (groupe) {
       setEditingId(groupe.id!)
       setCodeGroupe(groupe.code_groupe)
@@ -52,8 +52,8 @@ export default function GroupesPage(): React.ReactElement {
       setEnStage(groupe.en_stage)
     } else {
       setEditingId(null)
-      setCodeGroupe('')
-      setIdFiliere(filieres.length > 0 ? filieres[0].id! : '')
+      setCodeGroupe(defaultCode || '')
+      setIdFiliere(defaultFiliereId || (filieres.length > 0 ? filieres[0].id! : ''))
       setEnStage(false)
     }
     setIsModalOpen(true)
@@ -133,76 +133,127 @@ export default function GroupesPage(): React.ReactElement {
         <div className="card" style={{ padding: '24px' }}>
           {loading ? (
             <div className="loading-spinner"><div className="spinner" /></div>
-          ) : groupes.length === 0 ? (
+          ) : groupes.length === 0 && filieres.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">👥</div>
               <h3>{lang === 'ar' ? 'لا توجد أفواج' : 'Aucun groupe'}</h3>
               <p>{lang === 'ar' ? 'قم بإضافة الأفواج للبدء في جدولة الحصص' : 'Ajoutez des groupes pour commencer la planification'}</p>
             </div>
-          ) : (
-            <div className="table-wrapper" style={{ overflowX: 'auto', paddingBottom: 10 }}>
-              <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: '100%', border: '1.5px solid #000' }}>
-                <thead>
-                  <tr style={{ background: '#f5dadf' }}>
-                    <th style={{ width: 40, textAlign: 'center', border: '1.5px solid #000', padding: '10px', color: '#000' }}>#</th>
-                    {filieres.map(f => (
-                      <th key={f.id} style={{ textAlign: 'center', border: '1.5px solid #000', padding: '10px', color: '#000', fontWeight: 'bold' }}>
-                        {f.code_filiere}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.from({ length: filieres.length > 0 ? Math.max(1, ...filieres.map(f => groupes.filter(g => g.id_filiere === f.id).length)) : 1 }).map((_, rowIndex) => (
-                    <tr key={rowIndex}>
-                      <td style={{ textAlign: 'center', fontWeight: 'bold', border: '1.5px solid #000', background: '#f8fafc', color: '#000' }}>
-                        {rowIndex + 1}
-                      </td>
-                      {filieres.map(f => {
-                        const filiereGroupes = groupes.filter(g => g.id_filiere === f.id).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
-                        const groupe = filiereGroupes[rowIndex]
-                        return (
-                          <td key={f.id} style={{ textAlign: 'center', border: '1.5px solid #000', padding: '4px', minWidth: 100 }}>
-                            {groupe ? (
-                              <div 
-                                onClick={() => openModal(groupe)}
-                                style={{ 
-                                  cursor: 'pointer', 
-                                  background: groupe.en_stage ? '#fef3c7' : 'transparent',
-                                  color: groupe.en_stage ? '#b45309' : '#000',
-                                  padding: '6px 4px',
-                                  fontWeight: 700,
-                                  fontSize: '14px',
-                                  borderRadius: 4,
-                                  transition: 'background 0.2s'
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (!groupe.en_stage) e.currentTarget.style.background = '#e0e7ff'
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!groupe.en_stage) e.currentTarget.style.background = 'transparent'
-                                }}
-                                title={lang === 'ar' ? 'انقر للتعديل' : 'Cliquez pour modifier'}
-                              >
-                                {groupe.code_groupe}
-                              </div>
-                            ) : null}
-                          </td>
-                        )
-                      })}
+          ) : (() => {
+            // Compute virtual columns (100 and 200 for each filiere)
+            const virtualCols = filieres.flatMap(f => {
+              return [
+                {
+                  id: `${f.id}-100`,
+                  filiere: f,
+                  label: `${f.code_filiere}100`,
+                  prefix: '1',
+                  groupes: groupes.filter(g => g.id_filiere === f.id && (g.code_groupe.match(/\d+/) ? g.code_groupe.match(/\d+/)![0].startsWith('1') : true)).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
+                },
+                {
+                  id: `${f.id}-200`,
+                  filiere: f,
+                  label: `${f.code_filiere}200`,
+                  prefix: '2',
+                  groupes: groupes.filter(g => g.id_filiere === f.id && (g.code_groupe.match(/\d+/) ? g.code_groupe.match(/\d+/)![0].startsWith('2') : false)).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
+                }
+              ]
+            })
+
+            const maxGroupCount = virtualCols.length > 0 ? Math.max(0, ...virtualCols.map(c => c.groupes.length)) : 0;
+            const rowCount = Math.max(1, maxGroupCount + 1); // Always leave at least one empty row at the bottom for easy adding
+
+            return (
+              <div className="table-wrapper" style={{ overflowX: 'auto', paddingBottom: 10 }}>
+                <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: '100%', border: '1.5px solid #000' }}>
+                  <thead>
+                    <tr style={{ background: '#f5dadf' }}>
+                      <th style={{ width: 40, textAlign: 'center', border: '1.5px solid #000', padding: '10px', color: '#000' }}>#</th>
+                      {virtualCols.map(col => (
+                        <th key={col.id} style={{ textAlign: 'center', border: '1.5px solid #000', padding: '10px', color: '#000', fontWeight: 'bold' }}>
+                          {col.label}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280', display: 'flex', gap: 16, alignItems: 'center' }}>
-                <span>💡 {lang === 'ar' ? 'انقر على أي فوج لتعديله أو حذفه' : 'Cliquez sur un groupe pour le modifier/supprimer'}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 12, height: 12, background: '#fef3c7', borderRadius: 2, border: '1px solid #fcd34d' }}></div>
-                  {lang === 'ar' ? 'في فترة تدريب (Stage)' : 'En Stage'}
-                </span>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: rowCount }).map((_, rowIndex) => (
+                      <tr key={rowIndex}>
+                        <td style={{ textAlign: 'center', fontWeight: 'bold', border: '1.5px solid #000', background: '#f8fafc', color: '#000' }}>
+                          {rowIndex + 1}
+                        </td>
+                        {virtualCols.map(col => {
+                          const groupe = col.groupes[rowIndex]
+                          return (
+                            <td 
+                              key={col.id} 
+                              style={{ 
+                                textAlign: 'center', 
+                                border: '1.5px solid #000', 
+                                padding: '4px', 
+                                minWidth: 100, 
+                                cursor: groupe ? 'default' : 'pointer',
+                                background: groupe ? 'transparent' : '#ffffff'
+                              }}
+                              onClick={() => {
+                                if (!groupe) {
+                                  // Suggest the code based on the row. e.g. TEMI 100 -> Row 1 -> TEMI101
+                                  const suggestedNumber = (rowIndex + 1).toString().padStart(2, '0');
+                                  const defaultCode = `${col.filiere.code_filiere}${col.prefix}${suggestedNumber}`;
+                                  openModal(undefined, col.filiere.id, defaultCode);
+                                }
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!groupe) e.currentTarget.style.background = '#f1f5f9'
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!groupe) e.currentTarget.style.background = '#ffffff'
+                              }}
+                              title={!groupe ? (lang === 'ar' ? 'انقر لإضافة فوج هنا' : 'Cliquez pour ajouter un groupe') : undefined}
+                            >
+                              {groupe ? (
+                                <div 
+                                  onClick={(e) => { e.stopPropagation(); openModal(groupe); }}
+                                  style={{ 
+                                    cursor: 'pointer', 
+                                    background: groupe.en_stage ? '#fef3c7' : 'transparent',
+                                    color: groupe.en_stage ? '#b45309' : '#000',
+                                    padding: '6px 4px',
+                                    fontWeight: 700,
+                                    fontSize: '14px',
+                                    borderRadius: 4,
+                                    transition: 'background 0.2s'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!groupe.en_stage) e.currentTarget.style.background = '#e0e7ff'
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!groupe.en_stage) e.currentTarget.style.background = 'transparent'
+                                  }}
+                                  title={lang === 'ar' ? 'انقر للتعديل' : 'Cliquez pour modifier'}
+                                >
+                                  {groupe.code_groupe}
+                                </div>
+                              ) : (
+                                <div style={{ height: '100%', minHeight: '28px' }}></div>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280', display: 'flex', gap: 16, alignItems: 'center' }}>
+                  <span>💡 {lang === 'ar' ? 'انقر على خانة فارغة لإضافة فوج بسرعة، أو انقر على فوج للتعديل/الحذف' : 'Cliquez sur une case vide pour ajouter rapidement, ou sur un groupe pour modifier/supprimer'}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 12, height: 12, background: '#fef3c7', borderRadius: 2, border: '1px solid #fcd34d' }}></div>
+                    {lang === 'ar' ? 'في فترة تدريب (Stage)' : 'En Stage'}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
       </div>
 
