@@ -10,14 +10,15 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
-import { formateursService, groupesService } from '../services/firebaseService'
-import type { Formateur, Groupe } from '../types'
+import { formateursService, groupesService, filieresService } from '../services/firebaseService'
+import type { Formateur, Groupe, Filiere } from '../types'
 import { useTranslation } from '../lib/i18n'
 
 export default function DnaPage(): React.ReactElement {
   const { lang } = useTranslation()
   const [formateurs, setFormateurs] = useState<Formateur[]>([])
   const [groupes, setGroupes] = useState<Groupe[]>([])
+  const [filieres, setFilieres] = useState<Filiere[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -44,11 +45,13 @@ export default function DnaPage(): React.ReactElement {
   async function loadData(): Promise<void> {
     try {
       setLoading(true)
-      const [formateursData, groupesData] = await Promise.all([
+      const [formateursData, groupesData, filieresData] = await Promise.all([
         formateursService.getAll(),
-        groupesService.getAll()
+        groupesService.getAll(),
+        filieresService.getAll()
       ])
       setFormateurs(formateursData)
+      setFilieres(filieresData)
       // Sort groups alphabetically
       setGroupes(groupesData.sort((a, b) => a.code_groupe.localeCompare(b.code_groupe)))
     } catch (err) {
@@ -262,6 +265,19 @@ export default function DnaPage(): React.ReactElement {
 
   // Calculate max rows (+1 to always show an empty row for new additions)
   const maxRows = Math.max(6, ...filteredFormateurs.map((f) => f.groupes_assignes?.length || 0)) + 1
+
+  // Generate Filière+Year options (e.g. TEMI100, TEMI200) from filieres
+  // nombre_annees=2 → generates CODE100, CODE200
+  // Falls back to groupes if no filieres loaded
+  const useFiliereMode = filieres.length > 0
+
+  // Group groupes by filiere for optgroup rendering (fallback)
+  const groupedByFiliere = groupes.reduce((acc, g) => {
+    const key = g.nom_filiere || g.id_filiere || 'Autres'
+    if (!acc[key]) acc[key] = []
+    acc[key].push(g)
+    return acc
+  }, {} as Record<string, typeof groupes>)
 
   return (
     <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -514,11 +530,32 @@ export default function DnaPage(): React.ReactElement {
                               }}
                             >
                               <option value="" style={{ color: '#9ca3af' }}>-</option>
-                              {groupes.map(g => (
-                                <option key={g.id} value={g.code_groupe} style={{ color: '#1f2937' }}>
-                                  {g.code_groupe}
-                                </option>
-                              ))}
+                              {useFiliereMode
+                                ? filieres.map(f => {
+                                    const annees = f.nombre_annees || 2
+                                    return (
+                                      <optgroup key={f.id} label={f.code_filiere}>
+                                        {Array.from({ length: annees }, (_, i) => {
+                                          const code = `${f.code_filiere}${(i + 1) * 100}`
+                                          return (
+                                            <option key={code} value={code} style={{ color: '#1f2937' }}>
+                                              {code}
+                                            </option>
+                                          )
+                                        })}
+                                      </optgroup>
+                                    )
+                                  })
+                                : Object.entries(groupedByFiliere).map(([filiereName, filiereGroupes]) => (
+                                    <optgroup key={filiereName} label={filiereName}>
+                                      {filiereGroupes.map(g => (
+                                        <option key={g.id} value={g.code_groupe} style={{ color: '#1f2937' }}>
+                                          {g.code_groupe}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  ))
+                              }
                             </select>
                           </td>
                         )
