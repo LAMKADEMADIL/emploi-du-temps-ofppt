@@ -207,20 +207,20 @@ export default function SalleGridPage(): React.ReactElement {
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                   <tr>
-                    <th colSpan={2} style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #000', padding: '10px', textAlign: 'left', fontWeight: 900, fontSize: 14 }}>
+                    <th colSpan={2} style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #000', padding: '12px', textAlign: 'left', fontWeight: 900, fontSize: 16 }}>
                       HEURE
                     </th>
                     {timeslots.map((t, i) => (
-                      <th key={i} style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #000', padding: '10px', textAlign: 'center', fontWeight: 900, fontSize: 13 }}>
+                      <th key={i} style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #000', padding: '12px', textAlign: 'center', fontWeight: 900, fontSize: 15 }}>
                         {t}
                       </th>
                     ))}
                   </tr>
                   <tr>
-                    <th style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #000', padding: '10px', width: 80, textAlign: 'center', fontWeight: 900 }}>
+                    <th style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #000', padding: '12px', width: 80, textAlign: 'center', fontWeight: 900, fontSize: 15 }}>
                       JOUR
                     </th>
-                    <th style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #000', padding: '10px', width: 130, textAlign: 'center', fontWeight: 900 }}>
+                    <th style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #000', padding: '12px', width: 140, textAlign: 'center', fontWeight: 900, fontSize: 15 }}>
                       SALLE
                     </th>
                     {timeslots.map((_, i) => (
@@ -243,10 +243,10 @@ export default function SalleGridPage(): React.ReactElement {
                                 padding: '10px',
                                 textAlign: 'center',
                                 fontWeight: 900,
-                                fontSize: 13,
+                                fontSize: 15,
                                 writingMode: 'vertical-rl',
                                 transform: 'rotate(180deg)',
-                                letterSpacing: 2
+                                letterSpacing: 3
                               }}
                             >
                               {jour}
@@ -255,10 +255,10 @@ export default function SalleGridPage(): React.ReactElement {
                           <td style={{
                             background: '#f1f5f9',
                             border: '1px solid #000',
-                            padding: '8px 12px',
+                            padding: '9px 12px',
                             textAlign: 'center',
                             fontWeight: 800,
-                            fontSize: 12,
+                            fontSize: 14,
                             color: '#0f172a',
                             whiteSpace: 'nowrap'
                           }}>
@@ -285,8 +285,8 @@ export default function SalleGridPage(): React.ReactElement {
                                 style={{
                                   border: '1px solid #000',
                                   padding: 0,
-                                  minWidth: 140,
-                                  height: 30,
+                                  minWidth: 150,
+                                  height: 38,
                                   cursor: 'pointer',
                                   transition: 'filter 0.15s',
                                   background: color || '#ffffff',
@@ -298,14 +298,14 @@ export default function SalleGridPage(): React.ReactElement {
                               >
                                 {label && (
                                   <span style={{
-                                    fontSize: 11,
+                                    fontSize: 13,
                                     fontWeight: 800,
                                     color: '#000000',
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis',
                                     whiteSpace: 'nowrap',
                                     display: 'block',
-                                    padding: '0 4px'
+                                    padding: '0 6px'
                                   }}>
                                     {label}
                                   </span>
