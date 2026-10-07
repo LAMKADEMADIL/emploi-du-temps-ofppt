@@ -455,19 +455,6 @@ export default function DnPage(): React.ReactElement {
                         </div>
                       </th>
                     ))}
-                    <th style={{ textAlign: 'center', borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '8px', minWidth: 44 }}>
-                      <button
-                        onClick={addExtraCol}
-                        title="Ajouter une colonne"
-                        style={{
-                          background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-                          border: 'none', borderRadius: 6, cursor: 'pointer',
-                          color: 'white', fontWeight: 800, fontSize: 18,
-                          width: 28, height: 28, display: 'inline-flex',
-                          alignItems: 'center', justifyContent: 'center'
-                        }}
-                      >+</button>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -515,7 +502,6 @@ export default function DnPage(): React.ReactElement {
                               <input type="text" value={extraColValues[col.id]?.[key1] ?? ''} onChange={(e) => setExtraColCell(col.id, key1, e.target.value)} placeholder="..." style={{ ...inputStyle, color: '#059669' }} />
                             </td>
                           ))}
-                          <td style={{ borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000' }} />
                         </tr>
                       )
                     }
@@ -549,7 +535,6 @@ export default function DnPage(): React.ReactElement {
                               <input type="text" value={extraColValues[col.id]?.[key2] ?? ''} onChange={(e) => setExtraColCell(col.id, key2, e.target.value)} placeholder="..." style={{ ...inputStyle2, color: '#059669' }} />
                             </td>
                           ))}
-                          <td style={{ borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000' }} />
                         </tr>
                       )
                     }

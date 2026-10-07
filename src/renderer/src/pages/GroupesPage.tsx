@@ -99,6 +99,7 @@ export default function GroupesPage(): React.ReactElement {
       try {
         await groupesService.delete(id)
         toast.success('تم الحذف بنجاح')
+        closeModal()
         loadData()
       } catch (error) {
         toast.error('حدث خطأ أثناء الحذف')
@@ -139,50 +140,67 @@ export default function GroupesPage(): React.ReactElement {
               <p>{lang === 'ar' ? 'قم بإضافة الأفواج للبدء في جدولة الحصص' : 'Ajoutez des groupes pour commencer la planification'}</p>
             </div>
           ) : (
-            <div className="table-wrapper">
-              <table>
+            <div className="table-wrapper" style={{ overflowX: 'auto', paddingBottom: 10 }}>
+              <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: '100%', border: '1.5px solid #000' }}>
                 <thead>
-                  <tr>
-                    <th style={{ width: 180 }}>{lang === 'ar' ? 'رمز الفوج' : 'Code Groupe'}</th>
-                    <th>{lang === 'ar' ? 'الشعبة التابع لها' : 'Filière'}</th>
-                    <th style={{ width: 200 }}>{lang === 'ar' ? 'حالة الفوج' : 'Statut'}</th>
-                    <th style={{ width: 140, textAlign: 'center' }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
+                  <tr style={{ background: '#f5dadf' }}>
+                    <th style={{ width: 40, textAlign: 'center', border: '1.5px solid #000', padding: '10px', color: '#000' }}>#</th>
+                    {filieres.map(f => (
+                      <th key={f.id} style={{ textAlign: 'center', border: '1.5px solid #000', padding: '10px', color: '#000', fontWeight: 'bold' }}>
+                        {f.code_filiere}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {groupes.map((g) => (
-                    <tr key={g.id}>
-                      <td style={{ fontWeight: 600, fontSize: '15px' }}>{g.code_groupe}</td>
-                      <td><span className="badge badge-primary">{g.nom_filiere}</span></td>
-                      <td>
-                        {g.en_stage ? (
-                          <span className="badge badge-warning">{lang === 'ar' ? 'في تدريب (Stage)' : 'En Stage'}</span>
-                        ) : (
-                          <span className="badge badge-success">{lang === 'ar' ? 'في المعهد' : 'En Cours'}</span>
-                        )}
+                  {Array.from({ length: filieres.length > 0 ? Math.max(1, ...filieres.map(f => groupes.filter(g => g.id_filiere === f.id).length)) : 1 }).map((_, rowIndex) => (
+                    <tr key={rowIndex}>
+                      <td style={{ textAlign: 'center', fontWeight: 'bold', border: '1.5px solid #000', background: '#f8fafc', color: '#000' }}>
+                        {rowIndex + 1}
                       </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                          <button 
-                            className="btn btn-secondary btn-icon" 
-                            title={lang === 'ar' ? 'تعديل' : 'Modifier'} 
-                            onClick={() => openModal(g)}
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button 
-                            className="btn btn-danger btn-icon" 
-                            title={lang === 'ar' ? 'حذف' : 'Supprimer'} 
-                            onClick={() => handleDelete(g.id!)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
+                      {filieres.map(f => {
+                        const filiereGroupes = groupes.filter(g => g.id_filiere === f.id).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
+                        const groupe = filiereGroupes[rowIndex]
+                        return (
+                          <td key={f.id} style={{ textAlign: 'center', border: '1.5px solid #000', padding: '4px', minWidth: 100 }}>
+                            {groupe ? (
+                              <div 
+                                onClick={() => openModal(groupe)}
+                                style={{ 
+                                  cursor: 'pointer', 
+                                  background: groupe.en_stage ? '#fef3c7' : 'transparent',
+                                  color: groupe.en_stage ? '#b45309' : '#000',
+                                  padding: '6px 4px',
+                                  fontWeight: 700,
+                                  fontSize: '14px',
+                                  borderRadius: 4,
+                                  transition: 'background 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!groupe.en_stage) e.currentTarget.style.background = '#e0e7ff'
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!groupe.en_stage) e.currentTarget.style.background = 'transparent'
+                                }}
+                                title={lang === 'ar' ? 'انقر للتعديل' : 'Cliquez pour modifier'}
+                              >
+                                {groupe.code_groupe}
+                              </div>
+                            ) : null}
+                          </td>
+                        )
+                      })}
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280', display: 'flex', gap: 16, alignItems: 'center' }}>
+                <span>💡 {lang === 'ar' ? 'انقر على أي فوج لتعديله أو حذفه' : 'Cliquez sur un groupe pour le modifier/supprimer'}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 12, height: 12, background: '#fef3c7', borderRadius: 2, border: '1px solid #fcd34d' }}></div>
+                  {lang === 'ar' ? 'في فترة تدريب (Stage)' : 'En Stage'}
+                </span>
+              </div>
             </div>
           )}
         </div>
@@ -236,13 +254,28 @@ export default function GroupesPage(): React.ReactElement {
                 </label>
               </div>
               
-              <div className="modal-footer">
-                <button type="submit" className="btn btn-primary">
-                  حفظ البيانات
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={closeModal}>
-                  إلغاء
-                </button>
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  {editingId && (
+                    <button 
+                      type="button" 
+                      className="btn btn-danger" 
+                      style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => handleDelete(editingId)}
+                    >
+                      <Trash2 size={16} />
+                      {lang === 'ar' ? 'حذف الفوج' : 'Supprimer'}
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="button" className="btn btn-secondary" onClick={closeModal}>
+                    {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {lang === 'ar' ? 'حفظ البيانات' : 'Enregistrer'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
