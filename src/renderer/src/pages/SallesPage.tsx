@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { sallesService } from '../services/firebaseService'
@@ -152,17 +152,17 @@ export default function SallesPage(): React.ReactElement {
               <table>
                 <thead>
                   <tr>
-                    <th>{lang === 'ar' ? 'اسم القاعة / الورشة' : 'Nom de la Salle / Atelier'}</th>
-                    <th style={{ width: 180 }}>{lang === 'ar' ? 'النوع' : 'Type'}</th>
-                    <th style={{ width: 140, textAlign: 'center' }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
+                    <th style={{ fontSize: 15, fontWeight: 700 }}>{lang === 'ar' ? 'اسم القاعة / الورشة' : 'Nom de la Salle / Atelier'}</th>
+                    <th style={{ width: 200, fontSize: 15, fontWeight: 700 }}>{lang === 'ar' ? 'النوع' : 'Type'}</th>
+                    <th style={{ width: 140, textAlign: 'center', fontSize: 15, fontWeight: 700 }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {salles.map((s) => (
                     <tr key={s.id}>
-                      <td style={{ fontWeight: 600, fontSize: '15px' }}>{s.nom_salle}</td>
+                      <td style={{ fontWeight: 700, fontSize: '17px', padding: '14px 16px' }}>{s.nom_salle}</td>
                       <td>
-                        <span className={`badge ${s.type_salle === 'Salle' ? 'badge-primary' : 'badge-warning'}`}>
+                        <span className={`badge ${s.type_salle === 'Salle' ? 'badge-primary' : 'badge-warning'}`} style={{ fontSize: 14, padding: '6px 14px' }}>
                           {s.type_salle === 'Salle'
                             ? (lang === 'ar' ? 'قاعة عادية' : 'Salle de cours')
                             : (lang === 'ar' ? 'ورشة عمل' : 'Atelier')}
