@@ -10,6 +10,7 @@ export default function GroupesPage(): React.ReactElement {
   const [filieres, setFilieres] = useState<Filiere[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const { lang } = useTranslation()
   
@@ -107,6 +108,25 @@ export default function GroupesPage(): React.ReactElement {
     }
   }
 
+  function confirmDeleteAll() {
+    setIsDeleteAllModalOpen(true)
+  }
+
+  async function handleDeleteAll() {
+    setIsDeleteAllModalOpen(false)
+    if (groupes.length === 0) return
+    try {
+      setLoading(true)
+      await Promise.all(groupes.map(g => groupesService.delete(g.id!)))
+      toast.success(lang === 'ar' ? 'تم مسح جميع الأفواج بنجاح' : 'Tous les groupes ont été supprimés')
+      loadData()
+    } catch (error) {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء مسح الأفواج' : 'Erreur lors de la suppression')
+      setLoading(false)
+    }
+  }
+
+
   return (
     <div className="fade-in-up">
       <div className="page-header">
@@ -114,19 +134,32 @@ export default function GroupesPage(): React.ReactElement {
           <h1>{lang === 'ar' ? 'إدارة الأفواج' : 'Gestion des Groupes'}</h1>
           <p>{lang === 'ar' ? 'إدارة المجموعات وحالتهم (في المعهد أو في فترة تدريب ميداني Stage)' : 'Gestion des groupes et statut de stage'}</p>
         </div>
-        <button 
-          className="btn btn-primary" 
-          style={{ padding: '11px 22px', fontSize: '14px', gap: '8px', fontWeight: 600 }}
-          onClick={() => {
-            if (filieres.length === 0) {
-              toast.error(lang === 'ar' ? 'يجب إضافة شعبة واحدة على الأقل قبل إضافة الأفواج' : 'Ajoutez au moins une filière avant d\'ajouter des groupes')
-              return
-            }
-            openModal()
-          }}
-        >
-          <Plus size={18} /> {lang === 'ar' ? 'إضافة فوج جديد' : 'Ajouter un groupe'}
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          {groupes.length > 0 && (
+            <button 
+              className="btn" 
+              style={{ padding: '11px 22px', fontSize: '14px', gap: '8px', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }}
+              onClick={confirmDeleteAll}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#fecaca' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#fee2e2' }}
+            >
+              <Trash2 size={18} /> {lang === 'ar' ? 'مسح الكل' : 'Vider la table'}
+            </button>
+          )}
+          <button 
+            className="btn btn-primary" 
+            style={{ padding: '11px 22px', fontSize: '14px', gap: '8px', fontWeight: 600 }}
+            onClick={() => {
+              if (filieres.length === 0) {
+                toast.error(lang === 'ar' ? 'يجب إضافة شعبة واحدة على الأقل قبل إضافة الأفواج' : 'Ajoutez au moins une filière avant d\'ajouter des groupes')
+                return
+              }
+              openModal()
+            }}
+          >
+            <Plus size={18} /> {lang === 'ar' ? 'إضافة فوج جديد' : 'Ajouter un groupe'}
+          </button>
+        </div>
       </div>
 
       <div className="page-body">
@@ -329,6 +362,42 @@ export default function GroupesPage(): React.ReactElement {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isDeleteAllModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsDeleteAllModalOpen(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450, textAlign: 'center' }}>
+            <div style={{ background: '#fee2e2', width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#dc2626' }}>
+              <Trash2 size={32} />
+            </div>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: 20, color: '#0a0a0a' }}>
+              {lang === 'ar' ? 'مسح جميع الأفواج؟' : 'Vider tous les groupes ?'}
+            </h3>
+            <p style={{ margin: '0 0 24px 0', color: '#4b5563', fontSize: 14, lineHeight: 1.5 }}>
+              {lang === 'ar' 
+                ? 'هل أنت متأكد من مسح جميع الأفواج بالكامل؟ لا يمكن التراجع عن هذا الإجراء.' 
+                : 'Êtes-vous sûr de vouloir supprimer TOUS les groupes ? Cette action est irréversible et supprimera toutes les données associées.'}
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setIsDeleteAllModalOpen(false)}
+                style={{ flex: 1, padding: '10px' }}
+              >
+                {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-danger" 
+                onClick={handleDeleteAll}
+                style={{ flex: 1, padding: '10px' }}
+              >
+                {lang === 'ar' ? 'نعم، قم بالمسح' : 'Oui, supprimer'}
+              </button>
+            </div>
           </div>
         </div>
       )}
