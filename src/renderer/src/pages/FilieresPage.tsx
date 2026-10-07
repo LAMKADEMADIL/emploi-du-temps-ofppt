@@ -23,7 +23,8 @@ export default function FilieresPage(): React.ReactElement {
     try {
       setLoading(true)
       const data = await filieresService.getAll()
-      setFilieres(data)
+      const sortedData = data.sort((a, b) => a.code_filiere.localeCompare(b.code_filiere))
+      setFilieres(sortedData)
     } catch (error) {
       toast.error('حدث خطأ أثناء تحميل البيانات')
     } finally {

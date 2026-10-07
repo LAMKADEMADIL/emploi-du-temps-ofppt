@@ -171,45 +171,92 @@ export default function FormateursPage(): React.ReactElement {
         }
 
         const firstRow = rows[0].map((c) => String(c ?? '').trim().toLowerCase())
-        let matriculeIdx = 0
-        let nomIdx = 1
-        let prenomIdx = 2
-        let startIdx = 0
 
+        // ── تحديد هيكل الأعمدة ──────────────────────────────────────────────
         const hasHeader = firstRow.some((cell) =>
-          cell.includes('matr') || cell.includes('mle') || cell.includes('مترك') || cell.includes('تسجيل') || cell.includes('code') ||
-          cell.includes('nom') || cell.includes('نسب') || cell.includes('لقب') || cell.includes('عائل') ||
+          cell.includes('matr') || cell.includes('mle') || cell.includes('مترك') ||
+          cell.includes('nom') || cell.includes('نسب') || cell.includes('لقب') ||
           cell.includes('prenom') || cell.includes('prénom') || cell.includes('اسم')
         )
 
+        let matriculeIdx = 0
+        let nomPrenomIdx = -1  // عمود "Nom et Prénom" المجمّع
+        let nomIdx = -1
+        let prenomIdx = -1
+        let startIdx = hasHeader ? 1 : 0
+
         if (hasHeader) {
-          startIdx = 1
           firstRow.forEach((cell, idx) => {
-            if (cell.includes('matr') || cell.includes('mle') || cell.includes('مترك') || cell.includes('تسجيل') || cell.includes('code')) {
+            if (cell.includes('matr') || cell.includes('mle') || cell.includes('مترك') || cell.includes('code')) {
               matriculeIdx = idx
-            } else if (cell.includes('prenom') || cell.includes('prénom') || (cell.includes('اسم') && !cell.includes('نسب') && !cell.includes('عائل') && !cell.includes('لقب'))) {
+            } else if (
+              // عمود مجمّع "nom et prénom" أو "nom & prénom"
+              (cell.includes('nom') && cell.includes('pr')) ||
+              (cell.includes('اسم') && cell.includes('نسب')) ||
+              cell === 'nom et prénom' || cell === 'nom & prénom' || cell === 'الاسم واللقب'
+            ) {
+              nomPrenomIdx = idx
+            } else if (cell.includes('prenom') || cell.includes('prénom') || cell === 'اسم') {
               prenomIdx = idx
-            } else if (cell.includes('nom') || cell.includes('نسب') || cell.includes('لقب') || cell.includes('عائل')) {
+            } else if (cell.includes('nom') || cell.includes('نسب') || cell.includes('لقب')) {
               nomIdx = idx
             }
           })
+
+          // إذا لم يُعثر على عمود prénom منفصل → يبحث في عمود nom عن "Nom et Prénom"
+          if (prenomIdx === -1 && nomIdx !== -1 && nomPrenomIdx === -1) {
+            // قد يكون عمود nom هو في الواقع "Nom et Prénom"
+            // نتحقق من أول صف بيانات
+            const sampleCell = String(rows[startIdx]?.[nomIdx] ?? '').trim()
+            if (sampleCell.includes(' ')) {
+              // الاسم مجمّع في هذا العمود
+              nomPrenomIdx = nomIdx
+              nomIdx = -1
+            }
+          }
         } else {
-          // Default: col 0 = Matricule, col 1 = Nom (النسب), col 2 = Prénom (الاسم)
+          // بدون رأس: إذا كان الملف عمودين فقط → عمود 0=Matricule، عمود 1=Nom et Prénom
+          const colCount = Math.max(...rows.map(r => r.length))
           matriculeIdx = 0
-          nomIdx = 1
-          prenomIdx = 2
-          startIdx = 0
+          if (colCount >= 3) {
+            nomIdx = 1
+            prenomIdx = 2
+          } else {
+            nomPrenomIdx = 1  // عمود مجمّع
+          }
         }
 
+        // ── تحليل الصفوف ───────────────────────────────────────────────────
         const parsed: Array<{ matricule: string; nom: string; prenom: string }> = []
+
         for (let i = startIdx; i < rows.length; i++) {
           const row = rows[i]
           if (!row || row.length === 0) continue
+
           const m = String(row[matriculeIdx] ?? '').trim()
-          const n = String(row[nomIdx] ?? '').trim()
-          const p = String(row[prenomIdx] ?? '').trim()
-          if (!m && !n && !p) continue
-          parsed.push({ matricule: m, nom: n, prenom: p })
+          let nom = ''
+          let prenom = ''
+
+          if (nomPrenomIdx !== -1) {
+            // ── حالة: الاسم مجمّع في عمود واحد (مثال: "KALAM HALIMA" أو "EL ABDANI ABDELTIF") ──
+            const full = String(row[nomPrenomIdx] ?? '').trim()
+            const parts = full.split(/\s+/)
+            if (parts.length === 1) {
+              nom = parts[0]
+              prenom = ''
+            } else {
+              // آخر كلمة = Prénom (الاسم)، الباقي = Nom (النسب)
+              prenom = parts[parts.length - 1]
+              nom = parts.slice(0, -1).join(' ')
+            }
+          } else {
+            // ── حالة: عمودان منفصلان Nom + Prénom ──
+            nom = nomIdx !== -1 ? String(row[nomIdx] ?? '').trim() : ''
+            prenom = prenomIdx !== -1 ? String(row[prenomIdx] ?? '').trim() : ''
+          }
+
+          if (!m && !nom && !prenom) continue
+          parsed.push({ matricule: m, nom, prenom })
         }
 
         if (parsed.length === 0) {
@@ -230,6 +277,8 @@ export default function FormateursPage(): React.ReactElement {
     }
     reader.readAsArrayBuffer(file)
   }
+
+
 
   // Confirm Import to Firebase
   async function handleConfirmImport(): Promise<void> {
@@ -773,41 +822,91 @@ export default function FormateursPage(): React.ReactElement {
               gap: 12,
               flexWrap: 'wrap'
             }}>
-              <span style={{ fontSize: 13.5, color: '#166534', fontWeight: 700 }}>
-                {lang === 'ar'
-                  ? 'الأعمدة المطلوبة: رقم التسجيل (Matricule) • النسب (Nom) • الاسم (Prénom)'
-                  : 'Colonnes requises : Matricule • Nom • Prénom'}
-              </span>
-              <button
-                type="button"
-                onClick={downloadTemplate}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  border: '1.5px solid #16a34a',
-                  background: 'white',
-                  color: '#16a34a',
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLButtonElement).style.background = '#16a34a'
-                  ;(e.currentTarget as HTMLButtonElement).style.color = 'white'
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLButtonElement).style.background = 'white'
-                  ;(e.currentTarget as HTMLButtonElement).style.color = '#16a34a'
-                }}
-                title={lang === 'ar' ? 'تحميل ملف Excel جاهز بالأعمدة الثلاثة' : 'Télécharger un modèle Excel exemple'}
-              >
-                <Download size={14} />
-                {lang === 'ar' ? 'تحميل نموذج Excel' : 'Télécharger modèle'}
-              </button>
+              {/* ── Legend: Formats supportés ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: 14, color: '#166534', fontWeight: 800 }}>
+                    {lang === 'ar' ? '📋 الصيغ المدعومة للملف:' : '📋 Formats de fichier acceptés :'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={downloadTemplate}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', borderRadius: 8,
+                      border: '1.5px solid #16a34a', background: 'white', color: '#16a34a',
+                      fontSize: 12.5, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#16a34a'; (e.currentTarget as HTMLButtonElement).style.color = 'white' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'white'; (e.currentTarget as HTMLButtonElement).style.color = '#16a34a' }}
+                  >
+                    <Download size={14} />
+                    {lang === 'ar' ? 'تحميل نموذج Excel' : 'Télécharger modèle'}
+                  </button>
+                </div>
+
+                {/* Format 1: 2 colonnes */}
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 240, background: '#dcfce7', borderRadius: 8, padding: '10px 14px', border: '1px solid #86efac' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#15803d', marginBottom: 6 }}>
+                      {lang === 'ar' ? '✅ الصيغة 1 — عمودان (مجمّع)' : '✅ Format 1 — 2 colonnes (nom combiné)'}
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                      <thead>
+                        <tr style={{ background: '#bbf7d0' }}>
+                          <td style={{ padding: '3px 8px', fontWeight: 700, border: '1px solid #86efac' }}>Matricule</td>
+                          <td style={{ padding: '3px 8px', fontWeight: 700, border: '1px solid #86efac' }}>Nom et Prénom</td>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ padding: '3px 8px', border: '1px solid #86efac', color: '#0a0a0a' }}>9202</td>
+                          <td style={{ padding: '3px 8px', border: '1px solid #86efac', color: '#0a0a0a' }}>KALAM HALIMA</td>
+                        </tr>
+                        <tr style={{ background: '#f0fdf4' }}>
+                          <td style={{ padding: '3px 8px', border: '1px solid #86efac', color: '#0a0a0a' }}>13293</td>
+                          <td style={{ padding: '3px 8px', border: '1px solid #86efac', color: '#0a0a0a' }}>EL ABDANI ABDELTIF</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div style={{ fontSize: 11, color: '#166534', marginTop: 5, fontStyle: 'italic' }}>
+                      {lang === 'ar' ? '← آخر كلمة = الاسم، الباقي = النسب' : '← Dernier mot = Prénom, reste = Nom'}
+                    </div>
+                  </div>
+
+                  {/* Format 2: 3 colonnes */}
+                  <div style={{ flex: 1, minWidth: 240, background: '#dbeafe', borderRadius: 8, padding: '10px 14px', border: '1px solid #93c5fd' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#1d4ed8', marginBottom: 6 }}>
+                      {lang === 'ar' ? '✅ الصيغة 2 — ثلاثة أعمدة (منفصل)' : '✅ Format 2 — 3 colonnes (séparés)'}
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                      <thead>
+                        <tr style={{ background: '#bfdbfe' }}>
+                          <td style={{ padding: '3px 8px', fontWeight: 700, border: '1px solid #93c5fd' }}>Matricule</td>
+                          <td style={{ padding: '3px 8px', fontWeight: 700, border: '1px solid #93c5fd' }}>Nom</td>
+                          <td style={{ padding: '3px 8px', fontWeight: 700, border: '1px solid #93c5fd' }}>Prénom</td>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ padding: '3px 8px', border: '1px solid #93c5fd', color: '#0a0a0a' }}>9202</td>
+                          <td style={{ padding: '3px 8px', border: '1px solid #93c5fd', color: '#0a0a0a' }}>KALAM</td>
+                          <td style={{ padding: '3px 8px', border: '1px solid #93c5fd', color: '#0a0a0a' }}>HALIMA</td>
+                        </tr>
+                        <tr style={{ background: '#eff6ff' }}>
+                          <td style={{ padding: '3px 8px', border: '1px solid #93c5fd', color: '#0a0a0a' }}>13293</td>
+                          <td style={{ padding: '3px 8px', border: '1px solid #93c5fd', color: '#0a0a0a' }}>EL ABDANI</td>
+                          <td style={{ padding: '3px 8px', border: '1px solid #93c5fd', color: '#0a0a0a' }}>ABDELTIF</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div style={{ fontSize: 11, color: '#1d4ed8', marginTop: 5, fontStyle: 'italic' }}>
+                      {lang === 'ar' ? '← كل عمود في مكانه مباشرةً' : '← Chaque colonne directement à sa place'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
 
             {/* Table Preview */}
