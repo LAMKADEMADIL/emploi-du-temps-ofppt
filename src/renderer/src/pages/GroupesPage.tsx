@@ -173,24 +173,20 @@ export default function GroupesPage(): React.ReactElement {
               <p>{lang === 'ar' ? 'قم بإضافة الأفواج للبدء في جدولة الحصص' : 'Ajoutez des groupes pour commencer la planification'}</p>
             </div>
           ) : (() => {
-            // Compute virtual columns (100 and 200 for each filiere)
+            // Compute virtual columns based on nombre_annees (default 2)
             const virtualCols = filieres.flatMap(f => {
-              return [
-                {
-                  id: `${f.id}-100`,
+              const annees = f.nombre_annees || 2;
+              const cols: any[] = [];
+              for (let i = 1; i <= annees; i++) {
+                cols.push({
+                  id: `${f.id}-${i}00`,
                   filiere: f,
-                  label: `${f.code_filiere}100`,
-                  prefix: '1',
-                  groupes: groupes.filter(g => g.id_filiere === f.id && (g.code_groupe.match(/\d+/) ? g.code_groupe.match(/\d+/)![0].startsWith('1') : true)).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
-                },
-                {
-                  id: `${f.id}-200`,
-                  filiere: f,
-                  label: `${f.code_filiere}200`,
-                  prefix: '2',
-                  groupes: groupes.filter(g => g.id_filiere === f.id && (g.code_groupe.match(/\d+/) ? g.code_groupe.match(/\d+/)![0].startsWith('2') : false)).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
-                }
-              ]
+                  label: `${f.code_filiere}${i}00`,
+                  prefix: i.toString(),
+                  groupes: groupes.filter(g => g.id_filiere === f.id && (g.code_groupe.match(/\d+/) ? g.code_groupe.match(/\d+/)![0].startsWith(i.toString()) : (i === 1))).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
+                });
+              }
+              return cols;
             })
 
             const maxGroupCount = virtualCols.length > 0 ? Math.max(0, ...virtualCols.map(c => c.groupes.length)) : 0;

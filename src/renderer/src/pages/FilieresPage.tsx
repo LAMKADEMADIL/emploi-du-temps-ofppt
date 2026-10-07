@@ -14,6 +14,7 @@ export default function FilieresPage(): React.ReactElement {
   
   const [codeFiliere, setCodeFiliere] = useState('')
   const [nomFiliere, setNomFiliere] = useState('')
+  const [nombreAnnees, setNombreAnnees] = useState<number>(2)
 
   useEffect(() => {
     loadFilieres()
@@ -37,10 +38,12 @@ export default function FilieresPage(): React.ReactElement {
       setEditingId(filiere.id!)
       setCodeFiliere(filiere.code_filiere)
       setNomFiliere(filiere.nom_filiere)
+      setNombreAnnees(filiere.nombre_annees || 2)
     } else {
       setEditingId(null)
       setCodeFiliere('')
       setNomFiliere('')
+      setNombreAnnees(2)
     }
     setIsModalOpen(true)
   }
@@ -59,10 +62,10 @@ export default function FilieresPage(): React.ReactElement {
 
     try {
       if (editingId) {
-        await filieresService.update(editingId, { code_filiere: codeFiliere, nom_filiere: nomFiliere })
+        await filieresService.update(editingId, { code_filiere: codeFiliere, nom_filiere: nomFiliere, nombre_annees: nombreAnnees })
         toast.success('تم التحديث بنجاح')
       } else {
-        await filieresService.add({ code_filiere: codeFiliere, nom_filiere: nomFiliere })
+        await filieresService.add({ code_filiere: codeFiliere, nom_filiere: nomFiliere, nombre_annees: nombreAnnees })
         toast.success('تمت الإضافة بنجاح')
       }
       closeModal()
@@ -115,8 +118,9 @@ export default function FilieresPage(): React.ReactElement {
               <table>
                 <thead>
                   <tr>
-                    <th style={{ width: 220 }}>{lang === 'ar' ? 'رمز الشعبة (Code)' : 'Code Filière'}</th>
+                    <th style={{ width: 160 }}>{lang === 'ar' ? 'رمز الشعبة (Code)' : 'Code Filière'}</th>
                     <th>{lang === 'ar' ? 'اسم الشعبة الكامل' : 'Nom Complet de la Filière'}</th>
+                    <th style={{ width: 140, textAlign: 'center' }}>{lang === 'ar' ? 'مدة التكوين' : 'Durée'}</th>
                     <th style={{ width: 140, textAlign: 'center' }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
                 </thead>
@@ -125,6 +129,9 @@ export default function FilieresPage(): React.ReactElement {
                     <tr key={f.id}>
                       <td><span className="badge badge-primary">{f.code_filiere}</span></td>
                       <td style={{ fontWeight: 600, fontSize: '15px' }}>{f.nom_filiere}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#4b5563' }}>
+                        {f.nombre_annees || 2} {lang === 'ar' ? 'سنوات' : 'Ans'}
+                      </td>
                       <td>
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
                           <button 
@@ -181,6 +188,18 @@ export default function FilieresPage(): React.ReactElement {
                   value={nomFiliere}
                   onChange={(e) => setNomFiliere(e.target.value)}
                 />
+              </div>
+              <div className="form-group" style={{ marginTop: 16 }}>
+                <label className="form-label">{lang === 'ar' ? 'مدة التكوين بالسنوات' : 'Durée de formation (Ans)'}</label>
+                <select 
+                  className="form-select"
+                  value={nombreAnnees}
+                  onChange={(e) => setNombreAnnees(parseInt(e.target.value))}
+                >
+                  <option value={1}>{lang === 'ar' ? 'سنة واحدة' : '1 An'}</option>
+                  <option value={2}>{lang === 'ar' ? 'سنتان' : '2 Ans'}</option>
+                  <option value={3}>{lang === 'ar' ? '3 سنوات' : '3 Ans'}</option>
+                </select>
               </div>
               
               <div className="modal-footer">

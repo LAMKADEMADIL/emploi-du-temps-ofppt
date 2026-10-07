@@ -23,6 +23,7 @@ export interface Filiere {
   id?: string
   code_filiere: string
   nom_filiere: string
+  nombre_annees?: number // e.g., 1, 2, or 3
   createdAt?: Date
 }
 
