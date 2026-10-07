@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Grid3X3, Trash2, X, User, Users, BookOpen, Check } from 'lucide-react'
 import { useTranslation } from '../lib/i18n'
-import { sallesService, formateursService, groupesService } from '../services/firebaseService'
+import { sallesService, formateursService, groupesService, planningSallesService } from '../services/firebaseService'
 import type { Salle, Formateur, Groupe } from '../types'
 import { toast } from 'react-hot-toast'
 
@@ -58,14 +58,25 @@ export default function SalleGridPage(): React.ReactElement {
   async function loadAll() {
     try {
       setLoading(true)
-      const [s, f, g] = await Promise.all([
+      const [s, f, g, savedGrid] = await Promise.all([
         sallesService.getAll(),
         formateursService.getAll(),
-        groupesService.getAll()
+        groupesService.getAll(),
+        planningSallesService.getAll()
       ])
       setSalles(s)
       setFormateurs(f)
       setGroupes(g.sort((a, b) => a.code_groupe.localeCompare(b.code_groupe)))
+      // تحميل البيانات المحفوظة من Firebase
+      const restoredGrid: Record<string, { formateurId: string; groupeId: string; module: string }> = {}
+      Object.values(savedGrid).forEach(cell => {
+        restoredGrid[cell.key] = {
+          formateurId: cell.formateurId,
+          groupeId: cell.groupeId,
+          module: cell.module
+        }
+      })
+      setGridData(restoredGrid)
     } catch (err) {
       console.error(err)
       toast.error('Erreur lors du chargement')
@@ -94,39 +105,49 @@ export default function SalleGridPage(): React.ReactElement {
     setSelectedCell({ jour, salle, timeslotIdx: tsIdx, key })
   }
 
-  function saveCell() {
+  async function saveCell() {
     if (!selectedCell) return
     if (!modalFormateur && !modalGroupe && !modalModule) {
+      // حذف الخلية
       setGridData(prev => {
         const next = { ...prev }
         delete next[selectedCell.key]
         return next
       })
+      await planningSallesService.deleteCell(selectedCell.key)
     } else {
+      const cellData = {
+        formateurId: modalFormateur,
+        groupeId: modalGroupe,
+        module: modalModule
+      }
       setGridData(prev => ({
         ...prev,
-        [selectedCell.key]: {
-          formateurId: modalFormateur,
-          groupeId: modalGroupe,
-          module: modalModule
-        }
+        [selectedCell.key]: cellData
       }))
+      // حفظ في Firebase
+      await planningSallesService.setCell({
+        key: selectedCell.key,
+        ...cellData
+      })
     }
     setSelectedCell(null)
   }
 
-  function clearCell() {
+  async function clearCell() {
     if (!selectedCell) return
     setGridData(prev => {
       const next = { ...prev }
       delete next[selectedCell.key]
       return next
     })
+    await planningSallesService.deleteCell(selectedCell.key)
     setSelectedCell(null)
   }
 
-  function clearAll() {
+  async function clearAll() {
     setGridData({})
+    await planningSallesService.deleteAll()
     toast.success(lang === 'ar' ? 'تم تفريغ الجدول بنجاح' : 'Tableau vidé avec succès')
   }
 

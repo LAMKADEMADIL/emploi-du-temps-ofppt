@@ -238,3 +238,52 @@ export const seancesService = {
       .map((g) => g.code_groupe)
   }
 }
+
+// ============================
+// PLANNING SALLES SERVICE
+// خدمة حفظ جدول القاعات الأسبوعي
+// ============================
+export interface PlanningCell {
+  key: string        // `${jour}__${salle}__${tsIdx}`
+  formateurId: string
+  groupeId: string
+  module: string
+}
+
+export const planningSallesService = {
+  // تحميل كل خلايا الجدول
+  async getAll(): Promise<Record<string, PlanningCell>> {
+    const snap = await getDocs(collection(db, 'planning_salles'))
+    const result: Record<string, PlanningCell> = {}
+    snap.docs.forEach(d => {
+      const data = d.data() as PlanningCell
+      result[data.key] = data
+    })
+    return result
+  },
+
+  // حفظ أو تحديث خلية واحدة
+  async setCell(cell: PlanningCell): Promise<void> {
+    // البحث عن وثيقة موجودة بنفس المفتاح
+    const q = query(collection(db, 'planning_salles'), where('key', '==', cell.key))
+    const snap = await getDocs(q)
+    if (!snap.empty) {
+      await updateDoc(snap.docs[0].ref, { ...cell })
+    } else {
+      await addDoc(collection(db, 'planning_salles'), { ...cell, updatedAt: serverTimestamp() })
+    }
+  },
+
+  // حذف خلية واحدة
+  async deleteCell(key: string): Promise<void> {
+    const q = query(collection(db, 'planning_salles'), where('key', '==', key))
+    const snap = await getDocs(q)
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+  },
+
+  // حذف كل الخلايا (تفريغ الجدول)
+  async deleteAll(): Promise<void> {
+    const snap = await getDocs(collection(db, 'planning_salles'))
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+  }
+}
