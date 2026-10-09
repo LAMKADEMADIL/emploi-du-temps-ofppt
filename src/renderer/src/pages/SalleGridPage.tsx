@@ -412,39 +412,78 @@ export default function SalleGridPage(): React.ReactElement {
                   }}
                 />
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 130, overflowY: 'auto' }}>
-                  <button
-                    type="button"
-                    onClick={() => setModalFormateur('')}
-                    style={{
-                      padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                      border: '1.5px solid #d1d5db',
-                      background: modalFormateur === '' ? '#1e293b' : 'white',
-                      color: modalFormateur === '' ? 'white' : '#374151',
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    —
-                  </button>
-                  {filteredFormateurs.map((f) => {
-                    const color = PROF_COLORS[formateurs.indexOf(f) % PROF_COLORS.length]
-                    const active = modalFormateur === f.id
-                    return (
+                  {modalFormateur ? (
+                    (() => {
+                      const selectedProf = formateurs.find(f => f.id === modalFormateur)
+                      const profIndex = selectedProf ? formateurs.indexOf(selectedProf) : 0
+                      const color = PROF_COLORS[profIndex % PROF_COLORS.length]
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => setModalFormateur('')}
+                            title={lang === 'ar' ? 'إلغاء التحديد وعرض باقي الأساتذة' : 'Désélectionner et afficher tous les formateurs'}
+                            style={{
+                              padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                              border: `2px solid ${color}`,
+                              background: color,
+                              color: 'white',
+                              boxShadow: `0 2px 8px ${color}55`,
+                              display: 'inline-flex', alignItems: 'center', gap: 6,
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <span>{selectedProf ? selectedProf.nom_prenom : '—'}</span>
+                            <span style={{
+                              background: 'rgba(255,255,255,0.3)',
+                              borderRadius: '50%',
+                              width: 18, height: 18,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 12, fontWeight: 900
+                            }}>✕</span>
+                          </button>
+                          <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
+                            {lang === 'ar' ? '(اضغط ✕ لتغيير الأستاذ أو عرض الكل)' : '(Cliquez ✕ pour changer)'}
+                          </span>
+                        </div>
+                      )
+                    })()
+                  ) : (
+                    <>
                       <button
-                        key={f.id}
                         type="button"
-                        onClick={() => setModalFormateur(f.id || '')}
+                        onClick={() => setModalFormateur('')}
                         style={{
                           padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                          border: `1.5px solid ${color}`,
-                          background: active ? color : `${color}15`,
-                          color: active ? 'white' : color,
+                          border: '1.5px solid #d1d5db',
+                          background: '#1e293b',
+                          color: 'white',
                           transition: 'all 0.15s'
                         }}
                       >
-                        {f.nom_prenom}
+                        —
                       </button>
-                    )
-                  })}
+                      {filteredFormateurs.map((f) => {
+                        const color = PROF_COLORS[formateurs.indexOf(f) % PROF_COLORS.length]
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setModalFormateur(f.id || '')}
+                            style={{
+                              padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                              border: `1.5px solid ${color}`,
+                              background: `${color}15`,
+                              color: color,
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            {f.nom_prenom}
+                          </button>
+                        )
+                      })}
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -466,38 +505,73 @@ export default function SalleGridPage(): React.ReactElement {
                   }}
                 />
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 110, overflowY: 'auto' }}>
-                  <button
-                    type="button"
-                    onClick={() => setModalGroupe('')}
-                    style={{
-                      padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                      border: '1.5px solid #d1d5db',
-                      background: modalGroupe === '' ? '#1e293b' : 'white',
-                      color: modalGroupe === '' ? 'white' : '#374151',
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    —
-                  </button>
-                  {filteredGroupes.map(g => {
-                    const active = modalGroupe === g.id
-                    return (
+                  {modalGroupe ? (
+                    (() => {
+                      const selectedGrp = groupes.find(g => g.id === modalGroupe)
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => setModalGroupe('')}
+                            title={lang === 'ar' ? 'إلغاء التحديد وعرض باقي الأفواج' : 'Désélectionner et afficher tous les groupes'}
+                            style={{
+                              padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                              border: '2px solid #10b981',
+                              background: '#10b981',
+                              color: 'white',
+                              boxShadow: '0 2px 8px rgba(16,185,129,0.35)',
+                              display: 'inline-flex', alignItems: 'center', gap: 6,
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <span>{selectedGrp ? selectedGrp.code_groupe : '—'}</span>
+                            <span style={{
+                              background: 'rgba(255,255,255,0.3)',
+                              borderRadius: '50%',
+                              width: 18, height: 18,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 12, fontWeight: 900
+                            }}>✕</span>
+                          </button>
+                          <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
+                            {lang === 'ar' ? '(اضغط ✕ لتغيير الفوج)' : '(Cliquez ✕ pour changer)'}
+                          </span>
+                        </div>
+                      )
+                    })()
+                  ) : (
+                    <>
                       <button
-                        key={g.id}
                         type="button"
-                        onClick={() => setModalGroupe(g.id || '')}
+                        onClick={() => setModalGroupe('')}
                         style={{
                           padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                          border: '1.5px solid #10b981',
-                          background: active ? '#10b981' : '#f0fdf4',
-                          color: active ? 'white' : '#065f46',
+                          border: '1.5px solid #d1d5db',
+                          background: '#1e293b',
+                          color: 'white',
                           transition: 'all 0.15s'
                         }}
                       >
-                        {g.code_groupe}
+                        —
                       </button>
-                    )
-                  })}
+                      {filteredGroupes.map(g => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => setModalGroupe(g.id || '')}
+                          style={{
+                            padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                            border: '1.5px solid #10b981',
+                            background: '#f0fdf4',
+                            color: '#065f46',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          {g.code_groupe}
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
 
