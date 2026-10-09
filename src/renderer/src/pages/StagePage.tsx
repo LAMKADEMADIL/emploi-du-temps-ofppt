@@ -638,7 +638,7 @@ export default function StagePage(): React.ReactElement {
                                 {groupe.code_groupe}
                               </span>
 
-                              {isInStage ? (
+                              {isInStage && (
                                 <span style={{
                                   fontSize: 10.5,
                                   fontWeight: 800,
@@ -651,14 +651,6 @@ export default function StagePage(): React.ReactElement {
                                   gap: 3
                                 }}>
                                   💼 Stage
-                                </span>
-                              ) : (
-                                <span style={{
-                                  fontSize: 10,
-                                  fontWeight: 600,
-                                  color: '#6b7280'
-                                }}>
-                                  Cours
                                 </span>
                               )}
                             </div>
