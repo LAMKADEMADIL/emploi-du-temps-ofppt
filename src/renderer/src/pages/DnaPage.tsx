@@ -424,21 +424,6 @@ export default function DnaPage(): React.ReactElement {
             </div>
           </div>
 
-          {/* Hint / Template */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#4b5563' }}>
-            <button
-              type="button"
-              onClick={downloadDnaTemplate}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                background: 'transparent', border: 'none', color: '#16a34a',
-                fontWeight: 700, cursor: 'pointer', fontSize: 13, textDecoration: 'underline'
-              }}
-            >
-              <Download size={13} />
-              {lang === 'ar' ? 'تحميل نموذج Excel' : 'Modèle Excel'}
-            </button>
-          </div>
         </div>
 
         {/* DNA Grid Table */}
