@@ -557,47 +557,11 @@ export default function StagePage(): React.ReactElement {
                             boxShadow: isYellow ? 'inset 0 0 0 1px #eab308' : 'none'
                           }}
                         >
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                             {/* Column Code (TEMI100, TEMI200, etc.) */}
                             <span style={{ fontSize: 16, fontWeight: 900, color: '#0a0a0a', letterSpacing: 0.5 }}>
                               {col.colCode}
                             </span>
-
-                            {/* Badge */}
-                            <span style={{
-                              fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 5,
-                              background: col.annee === 1 ? 'rgba(59, 130, 246, 0.15)' : 'rgba(139, 92, 246, 0.15)',
-                              color: col.annee === 1 ? '#1d4ed8' : '#6d28d9',
-                              border: col.annee === 1 ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(139, 92, 246, 0.3)'
-                            }}>
-                              {col.annee === 1 ? '1ère Année' : '2ème Année'}
-                            </span>
-
-                            {/* Quick Column Toggle Button */}
-                            {col.groupes.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  toggleColumnStage(col)
-                                }}
-                                style={{
-                                  marginTop: 4,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  padding: '3px 8px',
-                                  borderRadius: 5,
-                                  border: isYellow ? '1px solid #ca8a04' : '1px solid #d1d5db',
-                                  background: isYellow ? '#eab308' : '#ffffff',
-                                  color: isYellow ? '#ffffff' : '#374151',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s'
-                                }}
-                                title={col.isAllInStage ? 'إلغاء التدريب لجميع الأفواج في هذا العمود' : 'تحديد جميع الأفواج في هذا العمود في تدريب'}
-                              >
-                                {col.isAllInStage ? '✓ En Stage' : 'Remplir'}
-                              </button>
-                            )}
                           </div>
                         </th>
                       )
