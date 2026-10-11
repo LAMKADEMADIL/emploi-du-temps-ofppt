@@ -51,6 +51,11 @@ export default function SalleGridPage(): React.ReactElement {
   const [searchF, setSearchF] = useState('')
   const [searchG, setSearchG] = useState('')
 
+  // Vider par formateur modal
+  const [showViderModal, setShowViderModal] = useState(false)
+  const [viderSearch, setViderSearch] = useState('')
+  const [viderSelectedId, setViderSelectedId] = useState('')
+
   useEffect(() => {
     loadAll()
   }, [])
@@ -151,6 +156,28 @@ export default function SalleGridPage(): React.ReactElement {
     toast.success(lang === 'ar' ? 'تم تفريغ الجدول بنجاح' : 'Tableau vidé avec succès')
   }
 
+  async function clearByFormateur() {
+    if (!viderSelectedId) return
+    const keysToDelete = Object.keys(gridData).filter(
+      k => gridData[k].formateurId === viderSelectedId
+    )
+    if (keysToDelete.length === 0) {
+      toast.error(lang === 'ar' ? 'لا توجد خلايا لهذا الأستاذ' : 'Aucune cellule pour ce formateur')
+      return
+    }
+    setGridData(prev => {
+      const next = { ...prev }
+      keysToDelete.forEach(k => delete next[k])
+      return next
+    })
+    await Promise.all(keysToDelete.map(k => planningSallesService.deleteCell(k)))
+    const prof = formateurs.find(f => f.id === viderSelectedId)
+    toast.success(`${prof?.nom_prenom ?? ''} — ${lang === 'ar' ? 'تم الحذف بنجاح' : 'cellules supprimées'}`)
+    setShowViderModal(false)
+    setViderSelectedId('')
+    setViderSearch('')
+  }
+
   const filteredFormateurs = formateurs.filter(f =>
     f.nom_prenom.toLowerCase().includes(searchF.toLowerCase())
   )
@@ -210,6 +237,24 @@ export default function SalleGridPage(): React.ReactElement {
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {/* Vider par formateur */}
+          <button
+            type="button"
+            onClick={() => { setShowViderModal(true); setViderSelectedId(''); setViderSearch('') }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px',
+              fontSize: '14px', fontWeight: 700, background: 'white', color: '#7c3aed',
+              border: '2px solid #8b5cf6', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#8b5cf6'; e.currentTarget.style.color = 'white' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = '#7c3aed' }}
+          >
+            <User size={16} />
+            {lang === 'ar' ? 'تفريغ حسب الأستاذ' : 'Vider par formateur'}
+          </button>
+
+          {/* Tout vider */}
           <button
             type="button"
             onClick={clearAll}
@@ -628,6 +673,140 @@ export default function SalleGridPage(): React.ReactElement {
                 >
                   <Check size={15} />
                   {lang === 'ar' ? 'حفظ' : 'Enregistrer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Vider par formateur Modal ────────────────────────────────────────── */}
+      {showViderModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowViderModal(false)}
+          style={{ zIndex: 1000 }}
+        >
+          <div
+            className="modal"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: 480, width: '95vw', padding: 0, borderRadius: 16, overflow: 'hidden' }}
+          >
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #4c1d95, #7c3aed)',
+              color: 'white', padding: '18px 24px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+            }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <User size={18} />
+                  {lang === 'ar' ? 'تفريغ حسب الأستاذ' : 'Vider par formateur'}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.75, marginTop: 3 }}>
+                  {lang === 'ar'
+                    ? 'اختر أستاذاً لحذف جميع خلاياه من الجدول'
+                    : 'Choisissez un formateur pour supprimer toutes ses cellules'}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowViderModal(false)}
+                style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', borderRadius: 8, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <input
+                type="text"
+                autoFocus
+                placeholder={lang === 'ar' ? 'ابحث عن أستاذ...' : 'Rechercher un formateur...'}
+                value={viderSearch}
+                onChange={e => { setViderSearch(e.target.value); setViderSelectedId('') }}
+                style={{
+                  width: '100%', padding: '10px 14px', borderRadius: 10,
+                  border: '1.5px solid #d1d5db', fontSize: 14, outline: 'none',
+                  boxSizing: 'border-box', transition: 'border-color 0.2s'
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6' }}
+                onBlur={e => { e.currentTarget.style.borderColor = '#d1d5db' }}
+              />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
+                {formateurs
+                  .filter(f => f.nom_prenom.toLowerCase().includes(viderSearch.toLowerCase()))
+                  .map(f => {
+                    const color = PROF_COLORS[formateurs.indexOf(f) % PROF_COLORS.length]
+                    const isSelected = viderSelectedId === f.id
+                    const cellCount = Object.values(gridData).filter(c => c.formateurId === f.id).length
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setViderSelectedId(f.id || '')}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '10px 14px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                          border: isSelected ? `2px solid ${color}` : '1.5px solid #e5e7eb',
+                          background: isSelected ? `${color}18` : '#fafafa',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{
+                            width: 10, height: 10, borderRadius: '50%',
+                            background: color, flexShrink: 0
+                          }} />
+                          <span style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>
+                            {f.nom_prenom}
+                          </span>
+                        </div>
+                        <span style={{
+                          fontSize: 12, fontWeight: 700,
+                          color: cellCount > 0 ? color : '#9ca3af',
+                          background: cellCount > 0 ? `${color}18` : '#f3f4f6',
+                          padding: '2px 10px', borderRadius: 20
+                        }}>
+                          {cellCount} {lang === 'ar' ? 'خلية' : 'cellule(s)'}
+                        </span>
+                      </button>
+                    )
+                  })}
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowViderModal(false)}
+                  style={{
+                    padding: '10px 20px', borderRadius: 10, fontWeight: 700, fontSize: 14,
+                    border: '1.5px solid #e5e7eb', background: 'white', color: '#374151',
+                    cursor: 'pointer', transition: 'all 0.2s'
+                  }}
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+                </button>
+                <button
+                  type="button"
+                  onClick={clearByFormateur}
+                  disabled={!viderSelectedId}
+                  style={{
+                    padding: '10px 24px', borderRadius: 10, fontWeight: 700, fontSize: 14,
+                    border: 'none',
+                    background: viderSelectedId ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#e5e7eb',
+                    color: viderSelectedId ? 'white' : '#9ca3af',
+                    cursor: viderSelectedId ? 'pointer' : 'not-allowed',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    boxShadow: viderSelectedId ? '0 4px 12px rgba(124,58,237,0.35)' : 'none',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <Trash2 size={15} />
+                  {lang === 'ar' ? 'تفريغ' : 'Vider'}
                 </button>
               </div>
             </div>

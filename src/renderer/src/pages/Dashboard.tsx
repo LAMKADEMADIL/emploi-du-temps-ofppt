@@ -39,7 +39,7 @@ export default function Dashboard({ onNavigate }: DashboardProps): React.ReactEl
           groupesService.getAll(),
           seancesService.getAll()
         ])
-        
+
         setStats({
           formateurs: f.length,
           salles: s.length,
@@ -75,7 +75,7 @@ export default function Dashboard({ onNavigate }: DashboardProps): React.ReactEl
               <p>{t('dash.stat.formateurs')}</p>
             </div>
           </div>
-          
+
           <div className="stat-card" style={{ '--card-color': 'var(--accent)' } as any}>
             <div className="stat-icon"><CalendarDays size={28} color="white" /></div>
             <div className="stat-info">
@@ -83,7 +83,7 @@ export default function Dashboard({ onNavigate }: DashboardProps): React.ReactEl
               <p>{t('dash.stat.seances')}</p>
             </div>
           </div>
-          
+
           <div className="stat-card" style={{ '--card-color': 'var(--warning)' } as any}>
             <div className="stat-icon"><UsersRound size={28} color="white" /></div>
             <div className="stat-info">
@@ -91,7 +91,7 @@ export default function Dashboard({ onNavigate }: DashboardProps): React.ReactEl
               <p>{t('dash.stat.stage')}</p>
             </div>
           </div>
-          
+
           <div className="stat-card" style={{ '--card-color': 'var(--success)' } as any}>
             <div className="stat-icon"><DoorOpen size={28} color="white" /></div>
             <div className="stat-info">
@@ -115,7 +115,7 @@ export default function Dashboard({ onNavigate }: DashboardProps): React.ReactEl
                   <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{t('dash.addFormateur')}</h4>
                 </div>
               </button>
-              
+
               <button className="recent-item" onClick={() => onNavigate('salles')} style={{ border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'start' }}>
                 <div className="recent-item-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success-light)' }}>
                   <DoorOpen size={22} />
@@ -133,7 +133,7 @@ export default function Dashboard({ onNavigate }: DashboardProps): React.ReactEl
                   <h4 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{t('dash.addSeance')}</h4>
                 </div>
               </button>
-              
+
               <button className="recent-item" onClick={() => onNavigate('vacances')} style={{ border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'start' }}>
                 <div className="recent-item-icon" style={{ background: 'rgba(6, 182, 212, 0.15)', color: 'var(--accent-light)' }}>
                   <Search size={22} />
