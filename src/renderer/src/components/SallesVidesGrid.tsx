@@ -1,16 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import {
   Search,
-  FileSpreadsheet,
-  Printer,
   X,
   CheckCircle2,
   Sparkles,
-  LayoutGrid,
-  AlignLeft,
   ArrowLeft
 } from 'lucide-react'
-import * as XLSX from 'xlsx'
 import { toast } from 'react-hot-toast'
 import { sallesService, planningSallesService } from '../services/firebaseService'
 
@@ -39,10 +34,7 @@ export default function SallesVidesGrid({
     initialGridData || {}
   )
   const [loading, setLoading] = useState<boolean>(!initialSalleNames || !initialGridData)
-
-  // Filters & display modes
   const [searchSalle, setSearchSalle] = useState('')
-  const [displayMode, setDisplayMode] = useState<'text' | 'badges'>('text')
 
   // Load data if not provided as props
   useEffect(() => {
@@ -99,47 +91,6 @@ export default function SallesVidesGrid({
     })
   }
 
-  // Export to Excel (.xlsx) exactly matching Image 1
-  function handleExportExcel() {
-    try {
-      const rows = JOURS.map(jour => {
-        const row: Record<string, string> = { 'JOUR': jour }
-        TIMESLOT_LABELS.forEach((slot, tsIdx) => {
-          const free = getFreeSalles(jour, tsIdx)
-          row[slot] = free.join(' - ')
-        })
-        return row
-      })
-
-      const ws = XLSX.utils.json_to_sheet(rows)
-      // Set column widths
-      ws['!cols'] = [
-        { wch: 15 },
-        { wch: 45 },
-        { wch: 45 },
-        { wch: 45 },
-        { wch: 45 }
-      ]
-
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Trouver Salle Vide')
-      XLSX.writeFile(wb, 'Planning_Trouver_Salle_Vide.xlsx')
-      toast.success('Tableau des salles vides exporté en Excel (.xlsx)')
-    } catch (err) {
-      console.error(err)
-      toast.error("Erreur lors de l'exportation Excel")
-    }
-  }
-
-  function handlePrint() {
-    window.print()
-  }
-
-  // Calculate matching stats
-  const totalFreeSlots = JOURS.reduce((acc, jour) => {
-    return acc + TIMESLOT_LABELS.reduce((sum, _, tsIdx) => sum + getFreeSalles(jour, tsIdx).length, 0)
-  }, 0)
-
   const searchedMatchesCount = searchSalle.trim()
     ? JOURS.reduce((acc, jour) => {
         return (
@@ -155,232 +106,95 @@ export default function SallesVidesGrid({
     : 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* ── Toolbar ───────────────────────────────────────────────────────────── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* ── Barre de recherche épurée ────────────────────────────────────────── */}
       <div
         style={{
           background: '#ffffff',
-          borderRadius: 14,
-          padding: '16px 20px',
+          borderRadius: 12,
+          padding: '12px 16px',
           border: '1.5px solid #e2e8f0',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
           display: 'flex',
-          flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 14
+          gap: 12,
+          flexWrap: 'wrap'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {onBackToOccupation && (
+        <div style={{ position: 'relative', width: 280, maxWidth: '100%' }}>
+          <Search
+            size={16}
+            style={{
+              position: 'absolute',
+              left: 11,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#94a3b8'
+            }}
+          />
+          <input
+            type="text"
+            value={searchSalle}
+            onChange={e => setSearchSalle(e.target.value)}
+            placeholder="Rechercher une salle..."
+            style={{
+              width: '100%',
+              padding: '8px 30px 8px 34px',
+              borderRadius: 8,
+              border: '1.5px solid #cbd5e1',
+              fontSize: 13,
+              fontWeight: 600,
+              outline: 'none',
+              background: '#f8fafc'
+            }}
+          />
+          {searchSalle && (
             <button
               type="button"
-              onClick={onBackToOccupation}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '9px 14px',
-                background: '#f1f5f9',
-                border: '1.5px solid #cbd5e1',
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 700,
-                color: '#334155',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0' }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9' }}
-            >
-              <ArrowLeft size={16} />
-              Retour au Planning
-            </button>
-          )}
-
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span
-                style={{
-                  background: '#fef08a',
-                  border: '1.5px solid #ca8a04',
-                  color: '#854d0e',
-                  fontSize: 12,
-                  fontWeight: 900,
-                  padding: '3px 8px',
-                  borderRadius: 6,
-                  letterSpacing: 0.5
-                }}
-              >
-                {totalFreeSlots} DISPONIBILITÉS CETTE SEMAINE
-              </span>
-              <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0 }}>
-                Trouver Salle Vide
-              </h2>
-            </div>
-            <p style={{ fontSize: 12.5, color: '#64748b', margin: '2px 0 0 0' }}>
-              Grille hebdomadaire récapitulative des salles et ateliers non occupés
-            </p>
-          </div>
-        </div>
-
-        {/* Right side actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {/* Quick Search Salle */}
-          <div style={{ position: 'relative', width: 240 }}>
-            <Search
-              size={16}
+              onClick={() => setSearchSalle('')}
               style={{
                 position: 'absolute',
-                left: 10,
+                right: 8,
                 top: '50%',
                 transform: 'translateY(-50%)',
-                color: '#94a3b8'
+                background: 'none',
+                border: 'none',
+                color: '#64748b',
+                cursor: 'pointer',
+                padding: 2
               }}
-            />
-            <input
-              type="text"
-              value={searchSalle}
-              onChange={e => setSearchSalle(e.target.value)}
-              placeholder="Chercher une salle..."
-              style={{
-                width: '100%',
-                padding: '8px 30px 8px 32px',
-                borderRadius: 8,
-                border: '1.5px solid #cbd5e1',
-                fontSize: 13,
-                fontWeight: 600,
-                outline: 'none'
-              }}
-            />
-            {searchSalle && (
-              <button
-                type="button"
-                onClick={() => setSearchSalle('')}
-                style={{
-                  position: 'absolute',
-                  right: 8,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  color: '#64748b',
-                  cursor: 'pointer',
-                  padding: 2
-                }}
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
 
-          {/* Display Mode Toggle */}
-          <div
+        {onBackToOccupation && (
+          <button
+            type="button"
+            onClick={onBackToOccupation}
             style={{
-              display: 'flex',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
               background: '#f1f5f9',
-              borderRadius: 8,
-              padding: 3,
-              border: '1px solid #cbd5e1'
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setDisplayMode('text')}
-              title="Affichage texte avec tirets (Format Excel)"
-              style={{
-                padding: '6px 12px',
-                borderRadius: 6,
-                border: 'none',
-                fontSize: 12.5,
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                background: displayMode === 'text' ? '#2563eb' : 'transparent',
-                color: displayMode === 'text' ? '#ffffff' : '#475569',
-                transition: 'all 0.15s'
-              }}
-            >
-              <AlignLeft size={14} />
-              Texte Excel
-            </button>
-            <button
-              type="button"
-              onClick={() => setDisplayMode('badges')}
-              title="Affichage sous forme de badges distincts"
-              style={{
-                padding: '6px 12px',
-                borderRadius: 6,
-                border: 'none',
-                fontSize: 12.5,
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                background: displayMode === 'badges' ? '#2563eb' : 'transparent',
-                color: displayMode === 'badges' ? '#ffffff' : '#475569',
-                transition: 'all 0.15s'
-              }}
-            >
-              <LayoutGrid size={14} />
-              Badges
-            </button>
-          </div>
-
-          {/* Export Excel Button */}
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '9px 15px',
-              background: '#16a34a',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(22,163,74,0.3)',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#15803d' }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#16a34a' }}
-          >
-            <FileSpreadsheet size={16} />
-            Exporter Excel
-          </button>
-
-          {/* Print Button */}
-          <button
-            type="button"
-            onClick={handlePrint}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '9px 14px',
-              background: '#f8fafc',
-              color: '#1e293b',
               border: '1.5px solid #cbd5e1',
               borderRadius: 8,
               fontSize: 13,
               fontWeight: 700,
+              color: '#334155',
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.15s'
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9' }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9' }}
           >
-            <Printer size={16} />
-            Imprimer
+            <ArrowLeft size={15} />
+            Retour au Planning
           </button>
-        </div>
+        )}
       </div>
 
       {/* Info indicator if searching */}
@@ -422,7 +236,7 @@ export default function SallesVidesGrid({
         </div>
       )}
 
-      {/* ── Main Table (Identical to Image 1) ─────────────────────────────────── */}
+      {/* ── Main Table ──────────────────────────────────────────────────────── */}
       <div
         className="card"
         style={{
@@ -438,7 +252,7 @@ export default function SallesVidesGrid({
             <div className="spinner" />
           </div>
         ) : (
-          <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 230px)', overflowY: 'auto' }}>
+          <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 210px)', overflowY: 'auto' }}>
             <table
               style={{
                 width: '100%',
@@ -447,7 +261,7 @@ export default function SallesVidesGrid({
                 tableLayout: 'fixed'
               }}
             >
-              {/* Header row: Timeslots with Yellow background (#ffff00 / #fde047) */}
+              {/* Header row: Timeslots with Yellow background (#ffff00) */}
               <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
                   <th
@@ -488,7 +302,7 @@ export default function SallesVidesGrid({
               <tbody>
                 {JOURS.map(jour => (
                   <tr key={jour}>
-                    {/* Day column: Yellow background (#ffff00 / #fde047) */}
+                    {/* Day column: Yellow background (#ffff00) */}
                     <td
                       style={{
                         background: '#ffff00',
@@ -532,7 +346,7 @@ export default function SallesVidesGrid({
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
-                              marginBottom: 6
+                              marginBottom: 8
                             }}
                           >
                             <span
@@ -578,45 +392,8 @@ export default function SallesVidesGrid({
                             >
                               Toutes occupées (0)
                             </div>
-                          ) : displayMode === 'text' ? (
-                            /* Format exact de l'image 1: SALLE 02-AT CPA */
-                            <div
-                              style={{
-                                fontSize: 12.5,
-                                fontWeight: 700,
-                                color: '#0f172a',
-                                lineHeight: 1.65,
-                                wordBreak: 'break-word',
-                                whiteSpace: 'normal'
-                              }}
-                            >
-                              {freeSalles.map((salle, sIdx) => {
-                                const isHighlighted =
-                                  searchSalle.trim() &&
-                                  salle.toLowerCase().includes(searchSalle.trim().toLowerCase())
-
-                                return (
-                                  <React.Fragment key={salle}>
-                                    <span
-                                      style={{
-                                        color: isHighlighted ? '#15803d' : '#0f172a',
-                                        background: isHighlighted ? '#bbf7d0' : 'transparent',
-                                        padding: isHighlighted ? '1px 4px' : '0',
-                                        borderRadius: 3,
-                                        fontWeight: isHighlighted ? 900 : 700
-                                      }}
-                                    >
-                                      {salle}
-                                    </span>
-                                    {sIdx < freeSalles.length - 1 && (
-                                      <span style={{ color: '#64748b', fontWeight: 600 }}> - </span>
-                                    )}
-                                  </React.Fragment>
-                                )
-                              })}
-                            </div>
                           ) : (
-                            /* Format Badges distincts */
+                            /* Affichage Badges Exclusif */
                             <div
                               style={{
                                 display: 'flex',
