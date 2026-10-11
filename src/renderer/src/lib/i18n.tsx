@@ -162,22 +162,22 @@ interface I18nContextType {
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Language>('fr'); // Default to french
+  const [lang, setLang] = useState<Language>('fr');
 
   useEffect(() => {
-    document.documentElement.lang = lang;
-    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-  }, [lang]);
+    document.documentElement.lang = 'fr';
+    document.documentElement.dir = 'ltr';
+  }, []);
 
   const t = (key: string): string => {
     if (translations[key]) {
-      return translations[key][lang];
+      return translations[key]['fr'] || translations[key][lang];
     }
     return key;
   };
 
   return (
-    <I18nContext.Provider value={{ lang, setLang, t }}>
+    <I18nContext.Provider value={{ lang: 'fr', setLang, t }}>
       {children}
     </I18nContext.Provider>
   );

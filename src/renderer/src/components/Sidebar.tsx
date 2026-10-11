@@ -10,8 +10,6 @@ import {
   Search,
   FileDown,
   Wifi,
-  Globe,
-  ChevronLeft,
   ChevronRight,
   Network,
   Grid3X3,
@@ -29,7 +27,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentPage, onNavigate, isOpen = true, onToggle }: SidebarProps): React.ReactElement {
-  const { t, lang, setLang } = useTranslation()
+  const { t } = useTranslation()
 
   const navItems = [
     { id: 'dashboard' as NavPage, label: 'nav.dashboard', icon: <LayoutDashboard size={22} />, section: 'nav.section.main' },
@@ -59,7 +57,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
               style={{ width: 95, height: 95, borderRadius: 12, objectFit: 'contain', background: '#fff', flexShrink: 0, padding: 4 }} 
             />
             <div className="sidebar-logo-text">
-              <h2>{lang === 'ar' ? 'نظام إدارة الزمن' : 'Gestion du Temps'}</h2>
+              <h2>Gestion du Temps</h2>
               <span>OFPPT - ISTA</span>
             </div>
           </div>
@@ -67,10 +65,10 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
             <button
               className="sidebar-collapse-btn"
               onClick={onToggle}
-              title={lang === 'ar' ? 'إخفاء القائمة (Ctrl+B)' : 'Masquer le menu (Ctrl+B)'}
+              title="Masquer le menu (Ctrl+B)"
               aria-label="Toggle menu"
             >
-              {lang === 'ar' ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+              <ChevronRight size={18} />
             </button>
           )}
         </div>
@@ -88,7 +86,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
                 <button
                   className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
                   onClick={() => onNavigate(item.id)}
-                  style={{ textAlign: lang === 'ar' ? 'right' : 'left' }}
+                  style={{ textAlign: 'left' }}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   {t(item.label)}
@@ -99,23 +97,6 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
         </nav>
 
         <div className="sidebar-footer">
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <button 
-              className={`btn ${lang === 'ar' ? 'btn-primary' : 'btn-secondary'}`} 
-              style={{ flex: 1, padding: '9px 12px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }} 
-              onClick={() => setLang('ar')}
-            >
-              <Globe size={16} /> العربية
-            </button>
-            <button 
-              className={`btn ${lang === 'fr' ? 'btn-primary' : 'btn-secondary'}`} 
-              style={{ flex: 1, padding: '9px 12px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }} 
-              onClick={() => setLang('fr')}
-            >
-              <Globe size={16} /> Français
-            </button>
-          </div>
-          
           <div className="connection-badge" style={{ fontSize: '13px', padding: '9px 12px' }}>
             <div className="connection-dot" />
             <Wifi size={16} />
