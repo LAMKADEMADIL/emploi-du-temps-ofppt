@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Grid3X3, Trash2, X, User, Users, BookOpen, Check } from 'lucide-react'
+import { Grid3X3, Trash2, X, User, Users, BookOpen, Check, Search } from 'lucide-react'
 import { useTranslation } from '../lib/i18n'
 import { sallesService, formateursService, groupesService, planningSallesService } from '../services/firebaseService'
 import type { Salle, Formateur, Groupe } from '../types'
 import { toast } from 'react-hot-toast'
+import SallesVidesGrid from '../components/SallesVidesGrid'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CellData {
@@ -57,6 +58,9 @@ export default function SalleGridPage(): React.ReactElement {
   const [showViderModal, setShowViderModal] = useState(false)
   const [viderSearch, setViderSearch] = useState('')
   const [viderSelectedId, setViderSelectedId] = useState('')
+
+  // Mode d'affichage: Occupation des salles ou Trouver salle vide
+  const [activeView, setActiveView] = useState<'occupation' | 'salles_vides'>('occupation')
 
   useEffect(() => {
     loadAll()
@@ -217,69 +221,139 @@ export default function SalleGridPage(): React.ReactElement {
     <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="page-header">
+      <div className="page-header" style={{ gap: 16 }}>
         <div className="page-header-info">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 42, height: 42, borderRadius: 10,
-              background: 'linear-gradient(135deg, #4ade80, #16a34a)',
+              background: activeView === 'occupation'
+                ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
+                : 'linear-gradient(135deg, #facc15, #ca8a04)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '2px solid #15803d', color: 'white'
+              border: activeView === 'occupation' ? '2px solid #1e40af' : '2px solid #a16207',
+              color: 'white'
             }}>
-              <Grid3X3 size={22} />
+              {activeView === 'occupation' ? <Grid3X3 size={22} /> : <Search size={22} />}
             </div>
             <div>
               <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0a0a0a', margin: 0 }}>
-                {lang === 'ar' ? 'جدول القاعات' : 'Planning des Salles'}
+                {activeView === 'occupation' ? 'Planning des Salles' : 'Trouver Salle Vide'}
               </h1>
               <p style={{ fontSize: 13.5, color: '#4b5563', margin: '3px 0 0 0' }}>
-                {lang === 'ar'
-                  ? 'اضغط على أي خلية لتعيين أستاذ، مجموعة، ووحدة'
-                  : 'Cliquez sur une cellule pour assigner un formateur, groupe et module'}
+                {activeView === 'occupation'
+                  ? 'Cliquez sur une cellule pour assigner un formateur, groupe et module'
+                  : 'Tableau hebdomadaire récapitulatif des salles et ateliers non occupés'}
               </p>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {/* Vider par formateur */}
+        {/* ── Sélecteur de Mode (Onglets) ─────────────────────────────────── */}
+        <div style={{
+          display: 'flex',
+          background: '#e2e8f0',
+          borderRadius: 10,
+          padding: 3,
+          gap: 4
+        }}>
           <button
             type="button"
-            onClick={() => { setShowViderModal(true); setViderSelectedId(''); setViderSearch('') }}
+            onClick={() => setActiveView('occupation')}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px',
-              fontSize: '14px', fontWeight: 700, background: 'white', color: '#7c3aed',
-              border: '2px solid #8b5cf6', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              fontSize: '13.5px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              background: activeView === 'occupation' ? '#2563eb' : 'transparent',
+              color: activeView === 'occupation' ? '#ffffff' : '#475569',
+              boxShadow: activeView === 'occupation' ? '0 2px 6px rgba(37,99,235,0.35)' : 'none',
               transition: 'all 0.2s'
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#8b5cf6'; e.currentTarget.style.color = 'white' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = '#7c3aed' }}
           >
-            <User size={16} />
-            {lang === 'ar' ? 'تفريغ حسب الأستاذ' : 'Vider par formateur'}
+            <Grid3X3 size={16} />
+            Planning Salles
           </button>
 
-          {/* Tout vider */}
           <button
             type="button"
-            onClick={clearAll}
+            onClick={() => setActiveView('salles_vides')}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px',
-              fontSize: '14px', fontWeight: 700, background: 'white', color: '#dc2626',
-              border: '2px solid #ef4444', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              fontSize: '13.5px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              background: activeView === 'salles_vides' ? '#2563eb' : 'transparent',
+              color: activeView === 'salles_vides' ? '#ffffff' : '#475569',
+              boxShadow: activeView === 'salles_vides' ? '0 2px 6px rgba(37,99,235,0.35)' : 'none',
               transition: 'all 0.2s'
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.color = 'white' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = '#dc2626' }}
           >
-            <Trash2 size={16} />
-            {lang === 'ar' ? 'تفريغ الكل' : 'Tout vider'}
+            <Search size={16} />
+            Trouver Salle Vide
           </button>
         </div>
+
+        {/* ── Actions (Mode Occupation) ────────────────────────────────────── */}
+        {activeView === 'occupation' && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {/* Vider par formateur */}
+            <button
+              type="button"
+              onClick={() => { setShowViderModal(true); setViderSelectedId(''); setViderSearch('') }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px',
+                fontSize: '14px', fontWeight: 700, background: 'white', color: '#7c3aed',
+                border: '2px solid #8b5cf6', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#8b5cf6'; e.currentTarget.style.color = 'white' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = '#7c3aed' }}
+            >
+              <User size={16} />
+              Vider par formateur
+            </button>
+
+            {/* Tout vider */}
+            <button
+              type="button"
+              onClick={clearAll}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px',
+                fontSize: '14px', fontWeight: 700, background: 'white', color: '#dc2626',
+                border: '2px solid #ef4444', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.color = 'white' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = '#dc2626' }}
+            >
+              <Trash2 size={16} />
+              Tout vider
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <div className="page-body">
+      {activeView === 'salles_vides' ? (
+        <div className="page-body">
+          <SallesVidesGrid
+            salleNames={salleNames}
+            gridData={gridData}
+            onBackToOccupation={() => setActiveView('occupation')}
+          />
+        </div>
+      ) : (
+        <div className="page-body">
         <div className="card" style={{ padding: 0, overflow: 'hidden', border: '2px solid #e5e7eb' }}>
           {loading ? (
             <div className="loading-spinner" style={{ padding: 60 }}>
@@ -445,6 +519,7 @@ export default function SalleGridPage(): React.ReactElement {
           )}
         </div>
       </div>
+      )}
 
       {/* ── Selection Modal ─────────────────────────────────────────────────── */}
       {selectedCell && (

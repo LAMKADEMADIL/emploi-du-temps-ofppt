@@ -42,7 +42,7 @@ export const translations: Translations = {
   'nav.filieres': { ar: 'الشعب', fr: 'Filières' },
   'nav.groupes': { ar: 'الأفواج', fr: 'Groupes' },
   'nav.timetable': { ar: 'جدول الحصص', fr: 'Emploi du temps' },
-  'nav.vacances': { ar: 'الشواغر', fr: 'Vacances' },
+  'nav.vacances': { ar: 'البحث عن قاعة فارغة', fr: 'Trouver Salle Vide' },
   'nav.export': { ar: 'التصدير PDF', fr: 'Export PDF' },
   'nav.section.main': { ar: 'رئيسي', fr: 'Principal' },
   'nav.section.data': { ar: 'البيانات الأساسية', fr: 'Données de base' },
