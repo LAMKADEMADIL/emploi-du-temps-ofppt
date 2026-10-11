@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Search,
   X,
   CheckCircle2,
   Sparkles,
-  ArrowLeft
+  ArrowLeft,
+  Trash2
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { sallesService, planningSallesService } from '../services/firebaseService'
@@ -35,6 +36,8 @@ export default function SallesVidesGrid({
   )
   const [loading, setLoading] = useState<boolean>(!initialSalleNames || !initialGridData)
   const [searchSalle, setSearchSalle] = useState('')
+  const [isCleared, setIsCleared] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Load data if not provided as props
   useEffect(() => {
@@ -91,6 +94,17 @@ export default function SallesVidesGrid({
     })
   }
 
+  function handleVider() {
+    if (isCleared) {
+      setIsCleared(false)
+      toast.success('Tableau des salles libres affiché.')
+    } else {
+      setIsCleared(true)
+      setSearchSalle('')
+      toast.success('Tableau vidé.')
+    }
+  }
+
   const searchedMatchesCount = searchSalle.trim()
     ? JOURS.reduce((acc, jour) => {
         return (
@@ -107,7 +121,7 @@ export default function SallesVidesGrid({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* ── Barre de recherche épurée ────────────────────────────────────────── */}
+      {/* ── Toolbar ───────────────────────────────────────────────────────────── */}
       <div
         style={{
           background: '#ffffff',
@@ -122,6 +136,7 @@ export default function SallesVidesGrid({
           flexWrap: 'wrap'
         }}
       >
+        {/* ── GAUCHE : Champ Recherche ── */}
         <div style={{ position: 'relative', width: 280, maxWidth: '100%' }}>
           <Search
             size={16}
@@ -134,9 +149,13 @@ export default function SallesVidesGrid({
             }}
           />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchSalle}
-            onChange={e => setSearchSalle(e.target.value)}
+            onChange={e => {
+              setSearchSalle(e.target.value)
+              if (isCleared) setIsCleared(false)
+            }}
             placeholder="Rechercher une salle..."
             style={{
               width: '100%',
@@ -170,35 +189,117 @@ export default function SallesVidesGrid({
           )}
         </div>
 
-        {onBackToOccupation && (
+        {/* ── DROITE : Boutons ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+
+          {/* Bouton "Vide" — visible seulement quand le tableau affiche des données */}
+          {!isCleared && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsCleared(true)
+                setSearchSalle('')
+                toast.success('Tableau vidé.')
+              }}
+              title="Vider le tableau"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 16px',
+                background: '#ffffff',
+                border: '1.5px solid #fca5a5',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 800,
+                color: '#dc2626',
+                cursor: 'pointer',
+                transition: 'all 0.18s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = '#fee2e2'
+                e.currentTarget.style.borderColor = '#ef4444'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = '#ffffff'
+                e.currentTarget.style.borderColor = '#fca5a5'
+              }}
+            >
+              <Trash2 size={15} />
+              Vide
+            </button>
+          )}
+
+          {/* Bouton "Trouver les salles vides" — toujours visible */}
           <button
             type="button"
-            onClick={onBackToOccupation}
+            onClick={() => {
+              setIsCleared(false)
+              searchInputRef.current?.focus()
+            }}
+            title="Afficher les salles libres"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              padding: '8px 14px',
-              background: '#f1f5f9',
-              border: '1.5px solid #cbd5e1',
+              padding: '8px 16px',
+              background: !isCleared ? '#22c55e' : '#f1f5f9',
+              border: !isCleared ? '1.5px solid #16a34a' : '1.5px solid #cbd5e1',
               borderRadius: 8,
               fontSize: 13,
-              fontWeight: 700,
-              color: '#334155',
+              fontWeight: 800,
+              color: !isCleared ? '#ffffff' : '#64748b',
               cursor: 'pointer',
-              transition: 'all 0.15s'
+              transition: 'all 0.18s',
+              boxShadow: !isCleared ? '0 2px 8px rgba(34,197,94,0.3)' : 'none'
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0' }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9' }}
+            onMouseEnter={e => {
+              if (isCleared) e.currentTarget.style.background = '#e2e8f0'
+            }}
+            onMouseLeave={e => {
+              if (isCleared) e.currentTarget.style.background = '#f1f5f9'
+            }}
           >
-            <ArrowLeft size={15} />
-            Retour au Planning
+            <CheckCircle2 size={15} />
+            Trouver les salles vides
           </button>
-        )}
+
+          {/* Séparateur */}
+          {onBackToOccupation && (
+            <div style={{ width: 1, height: 28, background: '#e2e8f0' }} />
+          )}
+
+          {/* Retour au Planning */}
+          {onBackToOccupation && (
+            <button
+              type="button"
+              onClick={onBackToOccupation}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                background: '#f1f5f9',
+                border: '1.5px solid #cbd5e1',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                color: '#334155',
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9' }}
+            >
+              <ArrowLeft size={15} />
+              Retour au Planning
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Info indicator if searching */}
-      {searchSalle.trim() && (
+      {searchSalle.trim() && !isCleared && (
         <div
           style={{
             background: '#ecfdf5',
@@ -269,11 +370,11 @@ export default function SallesVidesGrid({
                       background: '#ffff00',
                       color: '#000000',
                       border: '2px solid #000000',
-                      padding: '14px 10px',
+                      padding: '10px 8px',
                       width: 140,
                       textAlign: 'center',
                       fontWeight: 900,
-                      fontSize: 15,
+                      fontSize: 14,
                       letterSpacing: 0.5
                     }}
                   >
@@ -321,8 +422,9 @@ export default function SallesVidesGrid({
 
                     {/* Créneaux for each day */}
                     {TIMESLOT_LABELS.map((_, tsIdx) => {
-                      const freeSalles = getFreeSalles(jour, tsIdx)
+                      const freeSalles = isCleared ? [] : getFreeSalles(jour, tsIdx)
                       const isSearchedMatch =
+                        !isCleared &&
                         searchSalle.trim() &&
                         freeSalles.some(s =>
                           s.toLowerCase().includes(searchSalle.trim().toLowerCase())
@@ -337,96 +439,103 @@ export default function SallesVidesGrid({
                             verticalAlign: 'top',
                             background: isSearchedMatch ? '#f0fdf4' : '#ffffff',
                             transition: 'background 0.2s',
-                            boxShadow: isSearchedMatch ? 'inset 0 0 0 2px #22c55e' : 'none'
+                            boxShadow: isSearchedMatch ? 'inset 0 0 0 2px #22c55e' : 'none',
+                            minHeight: 80
                           }}
                         >
-                          {/* Mini header badge for count */}
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              marginBottom: 8
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: 10.5,
-                                fontWeight: 800,
-                                color: freeSalles.length > 0 ? '#1e40af' : '#991b1b',
-                                background: freeSalles.length > 0 ? '#dbeafe' : '#fee2e2',
-                                padding: '2px 7px',
-                                borderRadius: 4,
-                                textTransform: 'uppercase'
-                              }}
-                            >
-                              {freeSalles.length} {freeSalles.length > 1 ? 'libres' : 'libre'}
-                            </span>
-
-                            {isSearchedMatch && (
-                              <span
+                          {isCleared ? (
+                            <div style={{ height: 40 }} />
+                          ) : (
+                            <>
+                              {/* Mini header badge for count */}
+                              <div
                                 style={{
-                                  fontSize: 10.5,
-                                  fontWeight: 800,
-                                  color: '#15803d',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: 3
+                                  justifyContent: 'space-between',
+                                  marginBottom: 8
                                 }}
                               >
-                                <CheckCircle2 size={12} />
-                                Correspondance
-                              </span>
-                            )}
-                          </div>
+                                <span
+                                  style={{
+                                    fontSize: 10.5,
+                                    fontWeight: 800,
+                                    color: freeSalles.length > 0 ? '#1e40af' : '#991b1b',
+                                    background: freeSalles.length > 0 ? '#dbeafe' : '#fee2e2',
+                                    padding: '2px 7px',
+                                    borderRadius: 4,
+                                    textTransform: 'uppercase'
+                                  }}
+                                >
+                                  {freeSalles.length} {freeSalles.length > 1 ? 'libres' : 'libre'}
+                                </span>
 
-                          {freeSalles.length === 0 ? (
-                            <div
-                              style={{
-                                color: '#dc2626',
-                                fontStyle: 'italic',
-                                fontSize: 12,
-                                fontWeight: 700,
-                                padding: '8px 0'
-                              }}
-                            >
-                              Toutes occupées (0)
-                            </div>
-                          ) : (
-                            /* Affichage Badges Exclusif */
-                            <div
-                              style={{
-                                display: 'flex',
-                                flexWrap: 'wrap',
-                                gap: 5
-                              }}
-                            >
-                              {freeSalles.map(salle => {
-                                const isHighlighted =
-                                  searchSalle.trim() &&
-                                  salle.toLowerCase().includes(searchSalle.trim().toLowerCase())
-
-                                return (
+                                {isSearchedMatch && (
                                   <span
-                                    key={salle}
                                     style={{
-                                      fontSize: 11.5,
+                                      fontSize: 10.5,
                                       fontWeight: 800,
-                                      padding: '3px 8px',
-                                      borderRadius: 6,
-                                      background: isHighlighted ? '#dcfce7' : '#f8fafc',
-                                      border: isHighlighted
-                                        ? '1.5px solid #22c55e'
-                                        : '1px solid #cbd5e1',
-                                      color: isHighlighted ? '#15803d' : '#1e293b',
-                                      whiteSpace: 'nowrap'
+                                      color: '#15803d',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 3
                                     }}
                                   >
-                                    {salle}
+                                    <CheckCircle2 size={12} />
+                                    Correspondance
                                   </span>
-                                )
-                              })}
-                            </div>
+                                )}
+                              </div>
+
+                              {freeSalles.length === 0 ? (
+                                <div
+                                  style={{
+                                    color: '#dc2626',
+                                    fontStyle: 'italic',
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    padding: '8px 0'
+                                  }}
+                                >
+                                  Toutes occupées (0)
+                                </div>
+                              ) : (
+                                /* Affichage Badges Exclusif */
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: 5
+                                  }}
+                                >
+                                  {freeSalles.map(salle => {
+                                    const isHighlighted =
+                                      searchSalle.trim() &&
+                                      salle.toLowerCase().includes(searchSalle.trim().toLowerCase())
+
+                                    return (
+                                      <span
+                                        key={salle}
+                                        style={{
+                                          fontSize: 11.5,
+                                          fontWeight: 800,
+                                          padding: '3px 8px',
+                                          borderRadius: 6,
+                                          background: isHighlighted ? '#dcfce7' : '#f8fafc',
+                                          border: isHighlighted
+                                            ? '1.5px solid #22c55e'
+                                            : '1px solid #cbd5e1',
+                                          color: isHighlighted ? '#15803d' : '#1e293b',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                      >
+                                        {salle}
+                                      </span>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </>
                           )}
                         </td>
                       )

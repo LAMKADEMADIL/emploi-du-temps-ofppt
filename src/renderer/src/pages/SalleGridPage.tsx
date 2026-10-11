@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Grid3X3, Trash2, X, User, Users, BookOpen, Check, Search } from 'lucide-react'
 import { useTranslation } from '../lib/i18n'
-import { sallesService, formateursService, groupesService, planningSallesService } from '../services/firebaseService'
-import type { Salle, Formateur, Groupe } from '../types'
+import { sallesService, formateursService, groupesService, filieresService, planningSallesService } from '../services/firebaseService'
+import type { Salle, Formateur, Groupe, Filiere } from '../types'
 import { toast } from 'react-hot-toast'
 import SallesVidesGrid from '../components/SallesVidesGrid'
+import GroupesVidesGrid from '../components/GroupesVidesGrid'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CellData {
@@ -40,6 +41,7 @@ export default function SalleGridPage(): React.ReactElement {
   const [salles, setSalles] = useState<Salle[]>([])
   const [formateurs, setFormateurs] = useState<Formateur[]>([])
   const [groupes, setGroupes] = useState<Groupe[]>([])
+  const [filieres, setFilieres] = useState<Filiere[]>([])
   const [loading, setLoading] = useState(true)
 
   // Grid data: key → CellData
@@ -59,8 +61,8 @@ export default function SalleGridPage(): React.ReactElement {
   const [viderSearch, setViderSearch] = useState('')
   const [viderSelectedId, setViderSelectedId] = useState('')
 
-  // Mode d'affichage: Occupation des salles ou Trouver salle vide
-  const [activeView, setActiveView] = useState<'occupation' | 'salles_vides'>('occupation')
+  // Mode d'affichage: Occupation des salles, Trouver salle vide ou Trouver groupe vide
+  const [activeView, setActiveView] = useState<'occupation' | 'salles_vides' | 'groupes_vides'>('occupation')
 
   useEffect(() => {
     loadAll()
@@ -69,15 +71,17 @@ export default function SalleGridPage(): React.ReactElement {
   async function loadAll() {
     try {
       setLoading(true)
-      const [s, f, g, savedGrid] = await Promise.all([
+      const [s, f, g, fil, savedGrid] = await Promise.all([
         sallesService.getAll(),
         formateursService.getAll(),
         groupesService.getAll(),
+        filieresService.getAll(),
         planningSallesService.getAll()
       ])
       setSalles(s)
       setFormateurs(f)
       setGroupes(g.sort((a, b) => a.code_groupe.localeCompare(b.code_groupe)))
+      setFilieres(fil.sort((a, b) => a.code_filiere.localeCompare(b.code_filiere)))
       // تحميل البيانات المحفوظة من Firebase
       const restoredGrid: Record<string, { formateurId: string; groupeId: string; module: string }> = {}
       Object.values(savedGrid).forEach(cell => {
@@ -228,21 +232,29 @@ export default function SalleGridPage(): React.ReactElement {
               width: 42, height: 42, borderRadius: 10,
               background: activeView === 'occupation'
                 ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
-                : 'linear-gradient(135deg, #facc15, #ca8a04)',
+                : activeView === 'salles_vides'
+                ? 'linear-gradient(135deg, #facc15, #ca8a04)'
+                : 'linear-gradient(135deg, #059669, #10b981)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: activeView === 'occupation' ? '2px solid #1e40af' : '2px solid #a16207',
+              border: activeView === 'occupation' ? '2px solid #1e40af' : activeView === 'salles_vides' ? '2px solid #a16207' : '2px solid #047857',
               color: 'white'
             }}>
-              {activeView === 'occupation' ? <Grid3X3 size={22} /> : <Search size={22} />}
+              {activeView === 'occupation' ? <Grid3X3 size={22} /> : activeView === 'salles_vides' ? <Search size={22} /> : <Users size={22} />}
             </div>
             <div>
               <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0a0a0a', margin: 0 }}>
-                {activeView === 'occupation' ? 'Planning des Salles' : 'Trouver Salle Vide'}
+                {activeView === 'occupation'
+                  ? 'Planning des Salles'
+                  : activeView === 'salles_vides'
+                  ? 'Trouver Salle Vide'
+                  : 'Trouver Groupe Vide (Filières)'}
               </h1>
               <p style={{ fontSize: 13.5, color: '#4b5563', margin: '3px 0 0 0' }}>
                 {activeView === 'occupation'
                   ? 'Cliquez sur une cellule pour assigner un formateur, groupe et module'
-                  : 'Tableau hebdomadaire récapitulatif des salles et ateliers non occupés'}
+                  : activeView === 'salles_vides'
+                  ? 'Tableau hebdomadaire récapitulatif des salles et ateliers non occupés'
+                  : 'Disponibilité des groupes par filière (Noir = Libre / Rouge = En cours)'}
               </p>
             </div>
           </div>
@@ -301,6 +313,29 @@ export default function SalleGridPage(): React.ReactElement {
             <Search size={16} />
             Trouver Salle Vide
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveView('groupes_vides')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              fontSize: '13.5px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              background: activeView === 'groupes_vides' ? '#2563eb' : 'transparent',
+              color: activeView === 'groupes_vides' ? '#ffffff' : '#475569',
+              boxShadow: activeView === 'groupes_vides' ? '0 2px 6px rgba(37,99,235,0.35)' : 'none',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Users size={16} />
+            Trouver Groupe Vide
+          </button>
         </div>
 
         {/* ── Actions (Mode Occupation) ────────────────────────────────────── */}
@@ -312,12 +347,12 @@ export default function SalleGridPage(): React.ReactElement {
               onClick={() => { setShowViderModal(true); setViderSelectedId(''); setViderSearch('') }}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px',
-                fontSize: '14px', fontWeight: 700, background: 'white', color: '#7c3aed',
-                border: '2px solid #8b5cf6', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                fontSize: '14px', fontWeight: 700, background: 'white', color: '#2563eb',
+                border: '2px solid #2563eb', borderRadius: 'var(--radius-md)', cursor: 'pointer',
                 transition: 'all 0.2s'
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#8b5cf6'; e.currentTarget.style.color = 'white' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = '#7c3aed' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#2563eb'; e.currentTarget.style.color = 'white' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = '#2563eb' }}
             >
               <User size={16} />
               Vider par formateur
@@ -343,17 +378,28 @@ export default function SalleGridPage(): React.ReactElement {
         )}
       </div>
 
-      {/* ── Body ───────────────────────────────────────────────────────────── */}
-      {activeView === 'salles_vides' ? (
-        <div className="page-body">
-          <SallesVidesGrid
-            salleNames={salleNames}
-            gridData={gridData}
-            onBackToOccupation={() => setActiveView('occupation')}
-          />
-        </div>
-      ) : (
-        <div className="page-body">
+      {/* ── Body: Salles Vides ─────────────────────────────────────────────── */}
+      <div className="page-body" style={{ display: activeView === 'salles_vides' ? 'block' : 'none' }}>
+        <SallesVidesGrid
+          salleNames={salleNames}
+          gridData={gridData}
+          onBackToOccupation={() => setActiveView('occupation')}
+        />
+      </div>
+
+      {/* ── Body: Groupes Vides ────────────────────────────────────────────── */}
+      <div className="page-body" style={{ display: activeView === 'groupes_vides' ? 'block' : 'none' }}>
+        <GroupesVidesGrid
+          filieres={filieres}
+          groupes={groupes}
+          gridData={gridData}
+          formateurs={formateurs}
+          onBackToOccupation={() => setActiveView('occupation')}
+        />
+      </div>
+
+      {/* ── Body: Occupation Salles ────────────────────────────────────────── */}
+      <div className="page-body" style={{ display: activeView === 'occupation' ? 'block' : 'none' }}>
         <div className="card" style={{ padding: 0, overflow: 'hidden', border: '2px solid #e5e7eb' }}>
           {loading ? (
             <div className="loading-spinner" style={{ padding: 60 }}>
@@ -519,7 +565,6 @@ export default function SalleGridPage(): React.ReactElement {
           )}
         </div>
       </div>
-      )}
 
       {/* ── Selection Modal ─────────────────────────────────────────────────── */}
       {selectedCell && (
@@ -836,7 +881,7 @@ export default function SalleGridPage(): React.ReactElement {
           >
             {/* Header */}
             <div style={{
-              background: 'linear-gradient(135deg, #4c1d95, #7c3aed)',
+              background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
               color: 'white', padding: '18px 24px',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between'
             }}>
@@ -873,7 +918,7 @@ export default function SalleGridPage(): React.ReactElement {
                   border: '1.5px solid #d1d5db', fontSize: 14, outline: 'none',
                   boxSizing: 'border-box', transition: 'border-color 0.2s'
                 }}
-                onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#2563eb' }}
                 onBlur={e => { e.currentTarget.style.borderColor = '#d1d5db' }}
               />
 
