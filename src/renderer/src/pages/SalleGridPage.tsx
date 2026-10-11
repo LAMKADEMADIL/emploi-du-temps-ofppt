@@ -10,6 +10,7 @@ interface CellData {
   formateurId: string
   groupeId: string
   module: string
+  remarque?: string
 }
 
 type GridKey = string // `${jour}__${salle}__${tsIdx}`
@@ -48,6 +49,7 @@ export default function SalleGridPage(): React.ReactElement {
   const [modalFormateur, setModalFormateur] = useState('')
   const [modalGroupe, setModalGroupe] = useState('')
   const [modalModule, setModalModule] = useState('')
+  const [modalRemarque, setModalRemarque] = useState('')
   const [searchF, setSearchF] = useState('')
   const [searchG, setSearchG] = useState('')
 
@@ -105,6 +107,7 @@ export default function SalleGridPage(): React.ReactElement {
     setModalFormateur(existing?.formateurId || '')
     setModalGroupe(existing?.groupeId || '')
     setModalModule(existing?.module || '')
+    setModalRemarque(existing?.remarque || '')
     setSearchF('')
     setSearchG('')
     setSelectedCell({ jour, salle, timeslotIdx: tsIdx, key })
@@ -121,17 +124,18 @@ export default function SalleGridPage(): React.ReactElement {
       })
       await planningSallesService.deleteCell(selectedCell.key)
     } else {
-      const cellData = {
+      const cellData: CellData = {
         formateurId: modalFormateur,
         groupeId: modalGroupe,
-        module: modalModule
+        module: modalModule,
+        remarque: modalRemarque
       }
       setGridData(prev => ({
         ...prev,
         [selectedCell.key]: cellData
       }))
       // حفظ في Firebase
-      await planningSallesService.setCell({
+      await (planningSallesService.setCell as (cell: CellData & { key: string }) => Promise<void>)({
         key: selectedCell.key,
         ...cellData
       })
@@ -197,8 +201,9 @@ export default function SalleGridPage(): React.ReactElement {
     g.code_groupe.toLowerCase().includes(searchG.toLowerCase())
   )
 
+  // إزالة التكرار من القاعات
   const salleNames = salles.length > 0
-    ? salles.map(s => s.nom_salle)
+    ? Array.from(new Set(salles.map(s => s.nom_salle)))
     : [
         'SALLE 01', 'SALLE 02', 'SALLE 03', 'SALLE 05', 'SALLE 06',
         'SALLE 08', 'SALLE 09', 'SALLE 10', 'SALLE 11', 'SALLE INFO',
@@ -307,92 +312,131 @@ export default function SalleGridPage(): React.ReactElement {
                   </tr>
                 </thead>
                 <tbody>
-                  {jours.map(jour => (
+                  {jours.map((jour, jourIdx) => (
                     <React.Fragment key={jour}>
-                      {salleNames.map((salle, idx) => (
-                        <tr key={`${jour}-${idx}`} style={{ background: '#ffffff' }}>
-                          {idx === 0 && (
-                            <td
-                              rowSpan={salleNames.length}
-                              style={{
-                                background: '#f1f5f9',
-                                color: '#0f172a',
-                                border: '1px solid #000',
-                                padding: '10px',
-                                textAlign: 'center',
-                                fontWeight: 900,
-                                fontSize: 15,
-                                writingMode: 'vertical-rl',
-                                transform: 'rotate(180deg)',
-                                letterSpacing: 3
-                              }}
-                            >
-                              {jour}
-                            </td>
-                          )}
-                          <td style={{
-                            background: '#f1f5f9',
-                            border: '1px solid #000',
-                            padding: '9px 12px',
-                            textAlign: 'center',
-                            fontWeight: 800,
-                            fontSize: 14,
-                            color: '#0f172a',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            {salle}
-                          </td>
-                          {timeslots.map((_, tsIdx) => {
-                            const key = makeKey(jour, salle, tsIdx)
-                            const cell = gridData[key]
-                            const prof = cell ? formateurs.find(f => f.id === cell.formateurId) : null
-                            const groupe = cell ? groupes.find(g => g.id === cell.groupeId) : null
-                            const color = cell ? getProfColor(cell.formateurId) : null
-
-                            // Label format: "NOM_FORMATEUR - CODE_GROUPE" like the screenshot
-                            const label = [
-                              prof?.nom_prenom,
-                              groupe?.code_groupe
-                            ].filter(Boolean).join(' - ')
-
-                            return (
-                              <td
-                                key={tsIdx}
-                                onClick={() => openCell(jour, salle, tsIdx)}
-                                title={label || undefined}
-                                style={{
-                                  border: '1px solid #000',
-                                  padding: 0,
-                                  minWidth: 150,
-                                  height: 38,
-                                  cursor: 'pointer',
-                                  transition: 'filter 0.15s',
-                                  background: color || '#ffffff',
-                                  textAlign: 'center',
-                                  verticalAlign: 'middle'
-                                }}
-                                onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.9)' }}
-                                onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
-                              >
-                                {label && (
-                                  <span style={{
-                                    fontSize: 13,
-                                    fontWeight: 800,
-                                    color: '#000000',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                    display: 'block',
-                                    padding: '0 6px'
-                                  }}>
-                                    {label}
-                                  </span>
-                                )}
-                              </td>
-                            )
-                          })}
+                      {/* ── Séparateur entre jours ────────────────────────── */}
+                      {jourIdx > 0 && (
+                        <tr>
+                          <td
+                            colSpan={timeslots.length + 2}
+                            style={{
+                              background: 'linear-gradient(90deg, #0f172a, #334155, #0f172a)',
+                              height: 7,
+                              padding: 0,
+                              border: 'none'
+                            }}
+                          />
                         </tr>
-                      ))}
+                      )}
+                      {salleNames.map((salle, idx) => {
+                        const isLastRow = idx === salleNames.length - 1
+                        return (
+                          <tr key={`${jour}-${idx}`} style={{ background: '#ffffff' }}>
+                            {idx === 0 && (
+                              <td
+                                rowSpan={salleNames.length}
+                                style={{
+                                  background: '#f1f5f9',
+                                  color: '#0f172a',
+                                  border: '1px solid #000',
+                                  padding: '10px',
+                                  textAlign: 'center',
+                                  fontWeight: 900,
+                                  fontSize: 15,
+                                  writingMode: 'vertical-rl',
+                                  transform: 'rotate(180deg)',
+                                  letterSpacing: 3
+                                }}
+                              >
+                                {jour}
+                              </td>
+                            )}
+                            <td style={{
+                              background: '#f8fafc',
+                              border: '1px solid #94a3b8',
+                              borderBottom: isLastRow ? '2px solid #475569' : '1px solid #94a3b8',
+                              padding: '9px 12px',
+                              textAlign: 'center',
+                              fontWeight: 800,
+                              fontSize: 13,
+                              color: '#0f172a',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {salle}
+                            </td>
+                            {timeslots.map((_, tsIdx) => {
+                              const key = makeKey(jour, salle, tsIdx)
+                              const cell = gridData[key]
+                              const prof = cell ? formateurs.find(f => f.id === cell.formateurId) : null
+                              const groupe = cell ? groupes.find(g => g.id === cell.groupeId) : null
+                              const color = cell ? getProfColor(cell.formateurId) : null
+
+                              const label = [
+                                prof?.nom_prenom,
+                                groupe?.code_groupe
+                              ].filter(Boolean).join(' - ')
+
+                              const tooltipTitle = [
+                                label,
+                                cell?.module ? `Module: ${cell.module}` : '',
+                                cell?.remarque ? `Remarque: ${cell.remarque}` : ''
+                              ].filter(Boolean).join(' | ')
+
+                              return (
+                                <td
+                                  key={tsIdx}
+                                  onClick={() => openCell(jour, salle, tsIdx)}
+                                  title={tooltipTitle || undefined}
+                                  style={{
+                                    border: '1px solid #94a3b8',
+                                    borderBottom: isLastRow ? '2px solid #475569' : '1px solid #94a3b8',
+                                    padding: 0,
+                                    minWidth: 150,
+                                    height: 38,
+                                    cursor: 'pointer',
+                                    transition: 'filter 0.15s',
+                                    background: color || '#ffffff',
+                                    textAlign: 'center',
+                                    verticalAlign: 'middle'
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.88)' }}
+                                  onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
+                                >
+                                  {label && (
+                                    <span style={{
+                                      fontSize: 12,
+                                      fontWeight: 800,
+                                      color: '#000000',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      display: 'block',
+                                      padding: '0 6px'
+                                    }}>
+                                      {label}
+                                    </span>
+                                  )}
+                                  {cell?.remarque && (
+                                    <span style={{
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      color: 'rgba(0,0,0,0.6)',
+                                      display: 'block',
+                                      padding: '0 6px',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      fontStyle: 'italic'
+                                    }}>
+                                      📝 {cell.remarque}
+                                    </span>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      })}
                     </React.Fragment>
                   ))}
                 </tbody>
@@ -639,6 +683,29 @@ export default function SalleGridPage(): React.ReactElement {
                   }}
                   onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#d1d5db' }}
+                />
+              </div>
+
+              {/* Remarque input */}
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 8 }}>
+                  <span style={{ fontSize: 14 }}>📝</span>
+                  Remarque
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ajouter une remarque (optionnel)..."
+                  value={modalRemarque}
+                  onChange={e => setModalRemarque(e.target.value)}
+                  style={{
+                    width: '100%', padding: '10px 14px', borderRadius: 10,
+                    border: '1.5px solid #d1d5db', fontSize: 14, outline: 'none',
+                    boxSizing: 'border-box', fontWeight: 500,
+                    transition: 'border-color 0.2s', fontStyle: 'italic',
+                    color: '#6b7280'
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#f59e0b'; e.currentTarget.style.fontStyle = 'normal'; e.currentTarget.style.color = '#1e293b' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.fontStyle = modalRemarque ? 'normal' : 'italic'; e.currentTarget.style.color = modalRemarque ? '#1e293b' : '#6b7280' }}
                 />
               </div>
 
