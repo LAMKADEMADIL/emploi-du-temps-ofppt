@@ -500,18 +500,19 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   // ═══════════════════════════════════════════════════════════════════════════
   if (selectedSection) {
     const JOURS_LIST = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
-    const TS_LABELS = ['8h30 - 11h00', '11h00 - 13h30', '13h30 - 16h00', '16h00 - 18h30']
+    const TS_LABELS = ['8H30 À 11H00', '11H00 À 13H30', '13H30 À 16H00', '16H00 À 18H30']
     const anneeFormation = localStorage.getItem('annee_formation_groupe') || '2025-2026'
     const periodeApp = localStorage.getItem('periode_application_groupe') || 'Avril 2026'
 
     return (
-      <div className="fade-in-up" style={{ padding: '8px 16px 50px', background: '#f8fafc', minHeight: '100vh', overflowY: 'auto' }}>
-        {/* Top bar */}
+      <div className="fade-in-up" style={{ padding: '8px 16px 60px', background: '#eef2f7', minHeight: '100vh', overflowY: 'auto' }}>
+
+        {/* ── Top bar ─────────────────────────── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <button
             className="btn btn-secondary"
             onClick={() => setSelectedSection(null)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontWeight: 700 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', fontWeight: 700, borderRadius: 8 }}
           >
             <ArrowLeft size={18} />
             Retour au tableau principal
@@ -519,64 +520,87 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           <button
             className="btn btn-secondary"
             onClick={() => window.print()}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontWeight: 600 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', fontWeight: 600, borderRadius: 8 }}
           >
             <Printer size={18} />
             Imprimer / PDF
           </button>
         </div>
 
-        {/* Official Document */}
+        {/* ── Official Document ─────────────────── */}
         <div
           id="section-official-sheet"
           style={{
             background: '#ffffff',
-            border: '2px solid #000000',
-            borderRadius: 8,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-            padding: 20,
+            border: '2.5px solid #000',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
             maxWidth: 1300,
             margin: '0 auto',
-            color: '#000000'
+            color: '#000',
+            overflow: 'hidden'
           }}
         >
-          {/* Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 12, borderBottom: '2px solid #000', paddingBottom: 12, marginBottom: 12, alignItems: 'center' }}>
-            <img src={ofpptLogo} alt="OFPPT Logo" style={{ width: 90, height: 60, objectFit: 'contain' }} />
-            <div style={{ textAlign: 'center' }}>
-              <h1 style={{ fontSize: 19, fontWeight: 900, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {/* Header row: Logo + Title */}
+          <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', borderBottom: '2.5px solid #000' }}>
+            <div style={{ borderRight: '2px solid #000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 10px' }}>
+              <img src={ofpptLogo} alt="OFPPT" style={{ width: 100, height: 70, objectFit: 'contain' }} />
+            </div>
+            <div style={{ textAlign: 'center', padding: '14px 8px' }}>
+              <h1 style={{ fontSize: 22, fontWeight: 900, margin: '0 0 5px', textTransform: 'uppercase', letterSpacing: 1.5, color: '#0a1628' }}>
                 EMPLOI DU TEMPS DE LA SECTION
               </h1>
-              <div style={{ fontSize: 14, fontWeight: 800 }}>ANNEE DE FORMATION : {anneeFormation}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#334155', letterSpacing: 0.5 }}>
+                ANNEE DE FORMATION : {anneeFormation}
+              </div>
             </div>
           </div>
 
-          {/* Info Block */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 14, fontSize: 13 }}>
-            <div><strong>DRGC</strong></div>
-            <div style={{ textAlign: 'right' }}><strong>Période d'application: {periodeApp}</strong></div>
-            <div><strong>Complexe/EFP :</strong> CFP IMME/ISTA MY RACHID</div>
-            <div><strong>Filière :</strong> {selectedSection.filiereCode}</div>
-            <div><strong>Niveau :</strong> {selectedSection.anneeLabel}</div>
-            <div><strong>Mode de formation :</strong> FPA</div>
+          {/* Info block like Excel */}
+          <div style={{ borderBottom: '2px solid #000', padding: '8px 16px', fontSize: 13, lineHeight: '22px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: 2 }}>
+              <div><strong>DRGC</strong></div>
+              <div></div>
+              <div><strong>Complexe/EFP :</strong> CFP IMME/ISTA MY RACHID</div>
+              <div></div>
+              <div><strong>Groupe :</strong></div>
+              <div></div>
+              <div><strong>Filière :</strong> {selectedSection.filiereCode}</div>
+              <div></div>
+              <div><strong>Niveau :</strong> {selectedSection.anneeLabel}</div>
+              <div style={{ textAlign: 'right' }}><strong>Période d'application:</strong> {periodeApp}</div>
+              <div><strong>Masse horaire :</strong></div>
+              <div></div>
+              <div><strong>Mode de formation :</strong> FPA</div>
+              <div><strong>Parrain:</strong></div>
+            </div>
           </div>
 
-          {/* Loading state */}
+          {/* Loading */}
           {selectedSection.loading ? (
-            <div style={{ textAlign: 'center', padding: 40, fontSize: 16, color: '#64748b' }}>
-              <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
-              <br />Chargement du planning...
+            <div style={{ textAlign: 'center', padding: 56, fontSize: 15, color: '#64748b' }}>
+              <RefreshCw size={30} style={{ animation: 'spin 1s linear infinite', marginBottom: 12 }} />
+              <br />Chargement du planning de la section...
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000', fontSize: 12 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
                 <thead>
-                  <tr style={{ background: '#1e3a5f', color: '#ffffff' }}>
-                    <th style={{ padding: '8px 6px', border: '1.5px solid #000', fontWeight: 900, fontSize: 13, width: 80 }}>JOUR</th>
-                    <th style={{ padding: '8px 6px', border: '1.5px solid #000', fontWeight: 900, fontSize: 13, width: 75 }}>GROUPE</th>
+                  {/* Row 1: HEURE header */}
+                  <tr>
+                    <th colSpan={2} style={{ padding: '6px 4px', border: '1.5px solid #000', background: '#c8c8c8', fontWeight: 900, textAlign: 'center', fontSize: 12 }}>
+                      HEURE
+                    </th>
                     {TS_LABELS.map((lbl, i) => (
-                      <th key={i} style={{ padding: '8px 4px', border: '1.5px solid #000', fontWeight: 900, fontSize: 12, textAlign: 'center' }}>{lbl}</th>
+                      <th key={i} style={{ padding: '8px 6px', border: '1.5px solid #000', background: '#d9d9d9', fontWeight: 900, fontSize: 11.5, textAlign: 'center', letterSpacing: 0.2 }}>
+                        {lbl}
+                      </th>
                     ))}
+                  </tr>
+                  {/* Row 2: JOUR / GROUPE labels */}
+                  <tr>
+                    <th style={{ width: 78, padding: '6px 4px', border: '1.5px solid #000', background: '#bdbdbd', fontWeight: 900, fontSize: 12, textAlign: 'center' }}>JOUR</th>
+                    <th style={{ width: 82, padding: '6px 4px', border: '1.5px solid #000', background: '#bdbdbd', fontWeight: 900, fontSize: 12, textAlign: 'center' }}>GROUPE</th>
+                    {[0,1,2,3].map(i => <th key={i} style={{ border: '1.5px solid #000', background: '#bdbdbd' }} />)}
                   </tr>
                 </thead>
                 <tbody>
@@ -584,10 +608,9 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                     <React.Fragment key={jour}>
                       {selectedSection.groupes.map((groupe, grpIdx) => {
                         const isEnStage = groupe.en_stage
-                        const rowBg = jourIdx % 2 === 0 ? '#f8fafc' : '#ffffff'
                         return (
-                          <tr key={groupe.id} style={{ background: rowBg }}>
-                            {/* Day cell - only first group of day */}
+                          <tr key={groupe.id}>
+                            {/* Day cell merged vertically */}
                             {grpIdx === 0 && (
                               <td
                                 rowSpan={selectedSection.groupes.length}
@@ -595,79 +618,58 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                   border: '2px solid #000',
                                   textAlign: 'center',
                                   fontWeight: 900,
-                                  fontSize: 13,
-                                  background: '#1e3a5f',
-                                  color: '#ffffff',
+                                  fontSize: 12,
+                                  background: '#e2e8f0',
+                                  color: '#1e293b',
                                   verticalAlign: 'middle',
                                   padding: '4px 2px',
                                   textTransform: 'uppercase',
-                                  letterSpacing: 1
+                                  letterSpacing: 0.5,
+                                  whiteSpace: 'nowrap'
                                 }}
                               >
                                 {jour.toUpperCase()}
                               </td>
                             )}
                             {/* Groupe code */}
-                            <td style={{
-                              border: '1.5px solid #000',
-                              textAlign: 'center',
-                              fontWeight: 800,
-                              fontSize: 11.5,
-                              padding: '4px 2px',
-                              background: isEnStage ? '#fef3c7' : undefined,
-                              color: isEnStage ? '#92400e' : '#000'
-                            }}>
+                            <td style={{ border: '1.5px solid #000', textAlign: 'center', fontWeight: 700, fontSize: 11, padding: '5px 2px', background: '#f5f7fa', color: '#0a1628', whiteSpace: 'nowrap' }}>
                               {groupe.code_groupe}
                             </td>
-                            {/* Time slots */}
+                            {/* 4 time-slot cells */}
                             {[0, 1, 2, 3].map(tsIdx => {
                               const key = `${jour}__${groupe.id}__${tsIdx}`
                               const cell = selectedSection.schedule[key]
                               if (isEnStage) {
                                 return (
-                                  <td key={tsIdx} style={{
-                                    border: '1.5px solid #000',
-                                    textAlign: 'center',
-                                    fontSize: 11,
-                                    fontStyle: 'italic',
-                                    fontWeight: 700,
-                                    color: '#92400e',
-                                    background: '#fef9c3',
-                                    padding: '4px 2px'
-                                  }}>Stage</td>
+                                  <td key={tsIdx} style={{ border: '1.5px solid #000', textAlign: 'center', fontSize: 11, fontStyle: 'italic', fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '6px 4px' }}>
+                                    Stage
+                                  </td>
                                 )
                               }
-                              return (
-                                <td key={tsIdx} style={{
-                                  border: '1.5px solid #000',
-                                  textAlign: 'center',
-                                  fontSize: 11,
-                                  padding: '4px 2px',
-                                  fontWeight: cell ? 800 : 400,
-                                  color: cell ? '#1d4ed8' : '#94a3b8',
-                                  background: cell ? '#eff6ff' : undefined
-                                }}>
-                                  {cell ? `${cell.nomFormateur} - ${cell.nomSalle}` : ''}
-                                </td>
-                              )
+                              if (cell) {
+                                return (
+                                  <td key={tsIdx} style={{ border: '1.5px solid #000', textAlign: 'center', fontSize: 11, padding: '6px 4px', fontWeight: 800, color: '#7a1c00', background: '#ffccbc' }}>
+                                    {cell.nomFormateur} - {cell.nomSalle}
+                                  </td>
+                                )
+                              }
+                              return <td key={tsIdx} style={{ border: '1px solid #bbb', background: '#fff', padding: '6px 4px' }} />
                             })}
                           </tr>
                         )
                       })}
-                      {/* Separator row between days */}
-                      {jourIdx < JOURS_LIST.length - 1 && (
-                        <tr>
-                          <td colSpan={selectedSection.groupes.length > 0 ? 6 : 6} style={{ height: 6, background: '#e2e8f0', border: '1px solid #cbd5e1' }} />
-                        </tr>
-                      )}
+                      {/* Day separator stripe */}
+                      <tr>
+                        <td colSpan={6} style={{ height: 9, background: jourIdx % 2 === 0 ? '#dce8f7' : '#eef3fb', borderLeft: '2px solid #000', borderRight: '2px solid #000', borderBottom: '2px solid #000' }} />
+                      </tr>
                     </React.Fragment>
                   ))}
                 </tbody>
               </table>
 
               {selectedSection.groupes.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 32, color: '#64748b', fontSize: 15 }}>
-                  <AlertCircle size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
+                <div style={{ textAlign: 'center', padding: 48, color: '#64748b', fontSize: 15 }}>
+                  <AlertCircle size={34} style={{ marginBottom: 10, opacity: 0.5 }} />
                   <br />Aucun groupe trouvé pour cette section dans la base de données.
                 </div>
               )}
@@ -675,7 +677,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           )}
 
           {/* Footer signatures */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', border: '2px solid #000', borderTop: 'none', textAlign: 'center', padding: '16px 0 40px', marginTop: -2 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', border: '2.5px solid #000', borderTop: 'none', textAlign: 'center', padding: '24px 0 60px' }}>
             <div style={{ borderRight: '1.5px solid #000', fontWeight: 900, fontSize: 13 }}>Formateur</div>
             <div style={{ borderRight: '1.5px solid #000', fontWeight: 900, fontSize: 13 }}>Directeur / Directeur Pédagogique</div>
             <div style={{ fontWeight: 900, fontSize: 13 }}>Directeur du Complexe</div>
