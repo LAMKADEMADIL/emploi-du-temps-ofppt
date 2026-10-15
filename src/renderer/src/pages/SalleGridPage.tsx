@@ -62,7 +62,24 @@ export default function SalleGridPage(): React.ReactElement {
   const [viderSelectedId, setViderSelectedId] = useState('')
 
   // Mode d'affichage: Occupation des salles, Trouver salle vide ou Trouver groupe vide
-  const [activeView, setActiveView] = useState<'occupation' | 'salles_vides' | 'groupes_vides'>('occupation')
+  const [activeView, setActiveView] = useState<'occupation' | 'salles_vides' | 'groupes_vides'>(() => {
+    const saved = localStorage.getItem('planning_salles_view')
+    if (saved === 'salles_vides' || saved === 'groupes_vides' || saved === 'occupation') return saved
+    return 'occupation'
+  })
+
+  const changeActiveView = (view: 'occupation' | 'salles_vides' | 'groupes_vides') => {
+    setActiveView(view)
+    localStorage.setItem('planning_salles_view', view)
+  }
+
+  // Also sync state if user navigated from another page
+  useEffect(() => {
+    const saved = localStorage.getItem('planning_salles_view') as 'occupation' | 'salles_vides' | 'groupes_vides'
+    if (saved && (saved === 'salles_vides' || saved === 'groupes_vides' || saved === 'occupation')) {
+      setActiveView(saved)
+    }
+  }, [])
 
   useEffect(() => {
     loadAll()
@@ -101,8 +118,21 @@ export default function SalleGridPage(): React.ReactElement {
   }
 
   function getProfColor(formateurId: string): string {
-    const idx = formateurs.findIndex(f => f.id === formateurId)
-    return idx >= 0 ? PROF_COLORS[idx % PROF_COLORS.length] : '#6b7280'
+    if (!formateurId) return '#6b7280'
+    const idx = formateurs.findIndex(f => 
+      f.id === formateurId || 
+      (f.nom_prenom && f.nom_prenom.toUpperCase().includes(formateurId.toUpperCase())) ||
+      (f.nom && f.nom.toUpperCase().includes(formateurId.toUpperCase())) ||
+      formateurId.toUpperCase().includes((f.nom_prenom || '').toUpperCase())
+    )
+    if (idx >= 0) return PROF_COLORS[idx % PROF_COLORS.length]
+
+    // Fallback: consistent vibrant color derived from string hash
+    let hash = 0
+    for (let i = 0; i < formateurId.length; i++) {
+      hash = formateurId.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    return PROF_COLORS[Math.abs(hash) % PROF_COLORS.length]
   }
 
   function makeKey(jour: string, salle: string, tsIdx: number): GridKey {
@@ -270,7 +300,7 @@ export default function SalleGridPage(): React.ReactElement {
         }}>
           <button
             type="button"
-            onClick={() => setActiveView('occupation')}
+            onClick={() => changeActiveView('occupation')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -293,7 +323,7 @@ export default function SalleGridPage(): React.ReactElement {
 
           <button
             type="button"
-            onClick={() => setActiveView('salles_vides')}
+            onClick={() => changeActiveView('salles_vides')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -316,7 +346,7 @@ export default function SalleGridPage(): React.ReactElement {
 
           <button
             type="button"
-            onClick={() => setActiveView('groupes_vides')}
+            onClick={() => changeActiveView('groupes_vides')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -487,13 +517,33 @@ export default function SalleGridPage(): React.ReactElement {
                             {timeslots.map((_, tsIdx) => {
                               const key = makeKey(jour, salle, tsIdx)
                               const cell = gridData[key]
-                              const prof = cell ? formateurs.find(f => f.id === cell.formateurId) : null
-                              const groupe = cell ? groupes.find(g => g.id === cell.groupeId) : null
+                              
+                              // Flexible lookup: by ID or by Name/Code
+                              const prof = cell ? (
+                                formateurs.find(f => f.id === cell.formateurId) ||
+                                formateurs.find(f => (f.nom_prenom || '').toUpperCase().includes(cell.formateurId.toUpperCase())) ||
+                                formateurs.find(f => (f.nom || '').toUpperCase().includes(cell.formateurId.toUpperCase())) ||
+                                formateurs.find(f => cell.formateurId.toUpperCase().includes((f.nom_prenom || '').toUpperCase())) ||
+                                { nom_prenom: cell.formateurId, id: cell.formateurId }
+                              ) : null
+
+                              const groupe = cell ? (
+                                groupes.find(g => g.id === cell.groupeId) ||
+                                groupes.find(g => g.code_groupe.toUpperCase().replace(/\s+/g, '') === cell.groupeId.toUpperCase().replace(/\s+/g, '')) ||
+                                { code_groupe: cell.groupeId, id: cell.groupeId }
+                              ) : null
+
                               const color = cell ? getProfColor(cell.formateurId) : null
 
+                              const profNameDisplay = prof?.prenom && prof?.nom
+                                ? `${prof.nom} ${prof.prenom}`
+                                : prof?.nom_prenom || cell?.formateurId || ''
+
+                              const groupeCodeDisplay = groupe?.code_groupe || cell?.groupeId || ''
+
                               const label = [
-                                prof?.nom_prenom,
-                                groupe?.code_groupe
+                                profNameDisplay,
+                                groupeCodeDisplay
                               ].filter(Boolean).join(' - ')
 
                               const tooltipTitle = [
@@ -524,9 +574,10 @@ export default function SalleGridPage(): React.ReactElement {
                                 >
                                   {label && (
                                     <span style={{
-                                      fontSize: 12,
+                                      fontSize: 12.5,
                                       fontWeight: 800,
-                                      color: '#000000',
+                                      color: '#ffffff',
+                                      textShadow: '0 1px 3px rgba(0,0,0,0.85)',
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
                                       whiteSpace: 'nowrap',

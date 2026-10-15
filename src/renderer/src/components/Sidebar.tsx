@@ -41,7 +41,6 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
     { id: 'filieres' as NavPage, label: 'nav.filieres', icon: <BookOpen size={22} /> },
     { id: 'groupes' as NavPage, label: 'nav.groupes', icon: <UsersRound size={22} /> },
     { id: 'timetable' as NavPage, label: 'nav.timetable', icon: <CalendarDays size={22} />, section: 'nav.section.plan' },
-    { id: 'vacances' as NavPage, label: 'nav.vacances', icon: <Search size={22} /> },
     { id: 'export' as NavPage, label: 'nav.export', icon: <FileDown size={22} />, section: 'nav.section.reports' }
   ]
 

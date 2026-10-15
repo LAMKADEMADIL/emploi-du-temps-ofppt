@@ -110,6 +110,13 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   // Search filter
   const [searchTerm, setSearchTerm] = useState('')
 
+  // Modal Mise à jour date state (Image 1)
+  const [showDateModal, setShowDateModal] = useState(false)
+  const [anneeGroupe, setAnneeGroupe] = useState('2025-2026')
+  const [periodeGroupe, setPeriodeGroupe] = useState('Avril 2026')
+  const [anneeFormateur, setAnneeFormateur] = useState('2025-2026')
+  const [periodeFormateur, setPeriodeFormateur] = useState('Avril (01/04/2026)')
+
   useEffect(() => {
     loadBaseData()
   }, [])
@@ -267,10 +274,22 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     if (editSalle && selectedProfName) {
       try {
         const planningKey = `${cellEditModal.day.toUpperCase()}__${editSalle}__${cellEditModal.slotIdx}`
+        const profObj = formateurs.find(f => 
+          (f.nom_prenom || '').toUpperCase().includes(selectedProfName.toUpperCase()) ||
+          (f.nom || '').toUpperCase().includes(selectedProfName.toUpperCase()) ||
+          selectedProfName.toUpperCase().includes((f.nom_prenom || '').toUpperCase())
+        )
+        const formateurIdToSave = profObj?.id || selectedProfName
+
+        const grpObj = groupes.find(g => 
+          g.code_groupe.toUpperCase().replace(/\s+/g, '') === editGroupe.toUpperCase().replace(/\s+/g, '')
+        )
+        const groupeIdToSave = grpObj?.id || editGroupe || 'Groupe'
+
         await planningSallesService.setCell({
           key: planningKey,
-          formateurId: selectedProfName,
-          groupeId: editGroupe || 'Groupe',
+          formateurId: formateurIdToSave,
+          groupeId: groupeIdToSave,
           module: editModule || 'M'
         })
       } catch (e) {
@@ -306,15 +325,28 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     if (!selectedProfName) return
     try {
       let count = 0
+      const profObj = formateurs.find(f => 
+        (f.nom_prenom || '').toUpperCase().includes(selectedProfName.toUpperCase()) ||
+        (f.nom || '').toUpperCase().includes(selectedProfName.toUpperCase()) ||
+        selectedProfName.toUpperCase().includes((f.nom_prenom || '').toUpperCase())
+      )
+      const formateurIdToSave = profObj?.id || selectedProfName
+
       for (const [key, slot] of Object.entries(profSchedule)) {
         if (slot.salle) {
           const [day, slotIdxStr] = key.split('_')
           const slotIdx = parseInt(slotIdxStr, 10)
           const planningKey = `${day.toUpperCase()}__${slot.salle}__${slotIdx}`
+
+          const grpObj = groupes.find(g => 
+            g.code_groupe.toUpperCase().replace(/\s+/g, '') === (slot.groupe || '').toUpperCase().replace(/\s+/g, '')
+          )
+          const groupeIdToSave = grpObj?.id || slot.groupe || 'Groupe'
+
           await planningSallesService.setCell({
             key: planningKey,
-            formateurId: selectedProfName,
-            groupeId: slot.groupe || 'Groupe',
+            formateurId: formateurIdToSave,
+            groupeId: groupeIdToSave,
             module: slot.module || 'M'
           })
           count++
@@ -346,15 +378,52 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     }
   }
 
-  // Navigation handlers
+  // Vider cellule groupe: clears only the groups from the formateur timetable
+  function handleViderCelluleGroupe() {
+    if (!selectedProfName) return
+    const updated: ScheduleMap = {}
+    let count = 0
+    for (const [key, slot] of Object.entries(profSchedule)) {
+      if (slot.groupe && slot.groupe !== '-') count++
+      updated[key] = {
+        ...slot,
+        groupe: ''
+      }
+    }
+    saveSchedule(updated)
+    toast.success(
+      lang === 'ar'
+        ? `تم إخلاء الأفواج (${count}) من جدول الحصص`
+        : `Les groupes (${count}) ont été vidés de l'emploi du temps`
+    )
+  }
+
+  // Navigation handlers -> Route to Planning Salles view (occupation / salles_vides / groupes_vides)
   function navigateToTrouverSalleVide() {
-    localStorage.setItem('vacances_tab', 'table')
-    onNavigate('vacances')
+    localStorage.setItem('planning_salles_view', 'salles_vides')
+    onNavigate('salle_grid')
   }
 
   function navigateToTrouverGroupeVide() {
-    localStorage.setItem('vacances_tab', 'groupes')
-    onNavigate('vacances')
+    localStorage.setItem('planning_salles_view', 'groupes_vides')
+    onNavigate('salle_grid')
+  }
+
+  function navigateToPlanningSalles() {
+    localStorage.setItem('planning_salles_view', 'occupation')
+    onNavigate('salle_grid')
+  }
+
+  function handleSyncFeuillesGroupe() {
+    localStorage.setItem('annee_formation_groupe', anneeGroupe)
+    localStorage.setItem('periode_application_groupe', periodeGroupe)
+    toast.success('✅ Synchronisation des feuilles Groupe effectuée !')
+  }
+
+  function handleSyncFeuillesFormateur() {
+    localStorage.setItem('annee_formation_formateur', anneeFormateur)
+    localStorage.setItem('periode_application_formateur', periodeFormateur)
+    toast.success('✅ Synchronisation des feuilles Formateur effectuée !')
   }
 
   const totalSeancesCount = Object.keys(profSchedule).length
@@ -455,6 +524,14 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                 style={{ background: '#fff', border: '1px solid #cbd5e1', color: '#1e293b', fontWeight: 700, fontSize: 11, padding: '3px 8px', borderRadius: 4, cursor: 'pointer', textAlign: 'center' }}
               >
                 dé-synchron SALLE
+              </button>
+              <button
+                type="button"
+                onClick={handleViderCelluleGroupe}
+                style={{ background: '#fff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 900, fontSize: 12, padding: '4px 8px', borderRadius: 4, cursor: 'pointer', textAlign: 'center' }}
+                title={lang === 'ar' ? 'إخلاء المجموعات فقط من جدول الحصص' : 'Vider uniquement les groupes du tableau'}
+              >
+                Vider cellule groupe
               </button>
             </div>
           </div>
@@ -1060,7 +1137,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
             </button>
             <button
               className="hub-btn"
-              onClick={() => toast.success('Date mise à jour')}
+              onClick={() => setShowDateModal(true)}
               style={hubBtnStyle}
             >
               Mise a jour date
@@ -1231,6 +1308,190 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
         </div>
 
       </div>
+
+      {/* ── Modal Mise à Jour Date (Image 1) ────────────────────────────────── */}
+      {showDateModal && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 1300 }}
+          onClick={() => setShowDateModal(false)}
+        >
+          <div
+            className="modal"
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fef08a',
+              border: '2px solid #ca8a04',
+              borderRadius: 12,
+              padding: 0,
+              maxWidth: 720,
+              width: '95%',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
+              color: '#000000',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '10px 16px',
+                background: '#ffffff',
+                borderBottom: '1px solid #e2e8f0'
+              }}
+            >
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Mise a jour date</span>
+              <button
+                type="button"
+                onClick={() => setShowDateModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 20,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  color: '#64748b'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal Content with yellow background matching Image 1 */}
+            <div style={{ padding: '28px 24px 36px', display: 'flex', flexDirection: 'column', gap: 28 }}>
+              {/* Section 1: Groupe */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20, alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 900, fontSize: 15, width: 200 }}>ANNEE DE FORMATION :</span>
+                    <input
+                      type="text"
+                      value={anneeGroupe}
+                      onChange={(e) => setAnneeGroupe(e.target.value)}
+                      style={{
+                        padding: '6px 10px',
+                        border: '1.5px solid #000000',
+                        borderRadius: 4,
+                        fontWeight: 700,
+                        fontSize: 14,
+                        width: 140,
+                        background: '#ffffff'
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 900, fontSize: 15, width: 200 }}>Période d'application:</span>
+                    <input
+                      type="text"
+                      value={periodeGroupe}
+                      onChange={(e) => setPeriodeGroupe(e.target.value)}
+                      style={{
+                        padding: '6px 10px',
+                        border: '1.5px solid #000000',
+                        borderRadius: 4,
+                        fontWeight: 700,
+                        fontSize: 14,
+                        width: 140,
+                        background: '#ffffff'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleSyncFeuillesGroupe}
+                    style={{
+                      background: '#86efac',
+                      border: '2px solid #16a34a',
+                      borderRadius: 6,
+                      color: '#064e3b',
+                      fontWeight: 900,
+                      fontSize: 15,
+                      padding: '14px 18px',
+                      cursor: 'pointer',
+                      width: '100%',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                      transition: 'transform 0.1s'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
+                  >
+                    Sychronsation des feuilles Groupe
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 2: Formateur */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20, alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 900, fontSize: 15, width: 200 }}>ANNEE DE FORMATION :</span>
+                    <input
+                      type="text"
+                      value={anneeFormateur}
+                      onChange={(e) => setAnneeFormateur(e.target.value)}
+                      style={{
+                        padding: '6px 10px',
+                        border: '1.5px solid #000000',
+                        borderRadius: 4,
+                        fontWeight: 700,
+                        fontSize: 14,
+                        width: 140,
+                        background: '#ffffff'
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 900, fontSize: 15, width: 200 }}>Période d'application:</span>
+                    <input
+                      type="text"
+                      value={periodeFormateur}
+                      onChange={(e) => setPeriodeFormateur(e.target.value)}
+                      style={{
+                        padding: '6px 10px',
+                        border: '1.5px solid #000000',
+                        borderRadius: 4,
+                        fontWeight: 700,
+                        fontSize: 14,
+                        width: 140,
+                        background: '#ffffff'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleSyncFeuillesFormateur}
+                    style={{
+                      background: '#86efac',
+                      border: '2px solid #16a34a',
+                      borderRadius: 6,
+                      color: '#064e3b',
+                      fontWeight: 900,
+                      fontSize: 15,
+                      padding: '14px 18px',
+                      cursor: 'pointer',
+                      width: '100%',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                      transition: 'transform 0.1s'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
+                  >
+                    Sychronsation des feuilles Formateur
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
