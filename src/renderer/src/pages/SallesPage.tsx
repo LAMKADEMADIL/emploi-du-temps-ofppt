@@ -111,18 +111,7 @@ export default function SallesPage(): React.ReactElement {
           <h1>{lang === 'ar' ? 'إدارة القاعات والورشات' : 'Salles et Ateliers'}</h1>
           <p>{lang === 'ar' ? 'إدارة وتصنيف الأماكن المخصصة للتدريس والتدريب' : 'Gestion des salles de cours et ateliers pratiques'}</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            className="btn btn-secondary"
-            style={{ padding: '11px 18px', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}
-            onClick={handleResetSalles}
-            disabled={resetting}
-          >
-            <RefreshCw size={16} />
-            {resetting
-              ? (lang === 'ar' ? 'جاري التحديث...' : 'Mise à jour...')
-              : (lang === 'ar' ? 'إعادة تعيين القاعات' : 'Réinitialiser les salles')}
-          </button>
+        <div>
           <button
             className="btn btn-primary"
             style={{ padding: '11px 22px', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}
