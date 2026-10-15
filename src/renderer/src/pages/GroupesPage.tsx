@@ -11,6 +11,7 @@ export default function GroupesPage(): React.ReactElement {
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false)
+  const [isDeleteSingleModalOpen, setIsDeleteSingleModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const { lang } = useTranslation()
   
@@ -62,6 +63,7 @@ export default function GroupesPage(): React.ReactElement {
 
   function closeModal() {
     setIsModalOpen(false)
+    setIsDeleteSingleModalOpen(false)
     setEditingId(null)
   }
 
@@ -95,16 +97,16 @@ export default function GroupesPage(): React.ReactElement {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (window.confirm('هل أنت متأكد من حذف هذا الفوج؟')) {
-      try {
-        await groupesService.delete(id)
-        toast.success('تم الحذف بنجاح')
-        closeModal()
-        loadData()
-      } catch (error) {
-        toast.error('حدث خطأ أثناء الحذف')
-      }
+  async function confirmDeleteSingle() {
+    if (!editingId) return
+    try {
+      await groupesService.delete(editingId)
+      toast.success(lang === 'ar' ? 'تم حذف الفوج بنجاح' : 'Groupe supprimé avec succès')
+      setIsDeleteSingleModalOpen(false)
+      closeModal()
+      loadData()
+    } catch (error) {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء الحذف' : 'Erreur lors de la suppression')
     }
   }
 
@@ -274,7 +276,6 @@ export default function GroupesPage(): React.ReactElement {
                   </tbody>
                 </table>
                 <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280', display: 'flex', gap: 16, alignItems: 'center' }}>
-                  <span>💡 {lang === 'ar' ? 'انقر على خانة فارغة لإضافة فوج بسرعة، أو انقر على فوج للتعديل/الحذف' : 'Cliquez sur une case vide pour ajouter rapidement, ou sur un groupe pour modifier/supprimer'}</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 12, height: 12, background: '#fef3c7', borderRadius: 2, border: '1px solid #fcd34d' }}></div>
                     {lang === 'ar' ? 'في فترة تدريب (Stage)' : 'En Stage'}
@@ -320,20 +321,6 @@ export default function GroupesPage(): React.ReactElement {
                 </select>
               </div>
 
-              <div className="form-group" style={{ marginTop: 16 }}>
-                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                  <div className="toggle">
-                    <input 
-                      type="checkbox" 
-                      checked={enStage}
-                      onChange={(e) => setEnStage(e.target.checked)}
-                    />
-                    <div className="toggle-slider"></div>
-                  </div>
-                  <span>هذا الفوج حالياً في فترة تدريب ميداني (Stage) ولا يمكن جدولة حصص له</span>
-                </label>
-              </div>
-              
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   {editingId && (
@@ -341,7 +328,7 @@ export default function GroupesPage(): React.ReactElement {
                       type="button" 
                       className="btn btn-danger" 
                       style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
-                      onClick={() => handleDelete(editingId)}
+                      onClick={() => setIsDeleteSingleModalOpen(true)}
                     >
                       <Trash2 size={16} />
                       {lang === 'ar' ? 'حذف الفوج' : 'Supprimer'}
@@ -392,6 +379,42 @@ export default function GroupesPage(): React.ReactElement {
                 style={{ flex: 1, padding: '10px' }}
               >
                 {lang === 'ar' ? 'نعم، قم بالمسح' : 'Oui, supprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDeleteSingleModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setIsDeleteSingleModalOpen(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, textAlign: 'center', padding: '28px 24px' }}>
+            <div style={{ background: '#fee2e2', width: 64, height: 64, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#dc2626' }}>
+              <Trash2 size={32} />
+            </div>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: 20, color: '#0a0a0a', fontWeight: 700 }}>
+              {lang === 'ar' ? 'تأكيد حذف الفوج' : 'Confirmer la suppression'}
+            </h3>
+            <p style={{ margin: '0 0 24px 0', color: '#4b5563', fontSize: 14, lineHeight: 1.6 }}>
+              {lang === 'ar' 
+                ? `هل أنت متأكد من حذف الفوج "${codeGroupe}"؟ لا يمكن التراجع عن هذا الإجراء.` 
+                : `Êtes-vous sûr de vouloir supprimer définitivement le groupe "${codeGroupe}" ? Cette action est irréversible.`}
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setIsDeleteSingleModalOpen(false)}
+                style={{ flex: 1, padding: '10px 16px', fontWeight: 600 }}
+              >
+                {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-danger" 
+                onClick={confirmDeleteSingle}
+                style={{ flex: 1, padding: '10px 16px', fontWeight: 600 }}
+              >
+                {lang === 'ar' ? 'نعم، حذف' : 'Oui, supprimer'}
               </button>
             </div>
           </div>
