@@ -5,7 +5,15 @@ import { JOURS, TIME_SLOTS, type Jour, type HeureDebut } from '../types'
 import SallesVidesGrid from '../components/SallesVidesGrid'
 
 export default function VacancesPage(): React.ReactElement {
-  const [tab, setTab] = useState<'table' | 'groupes'>('table')
+  const [tab, setTab] = useState<'table' | 'groupes'>(() => {
+    const saved = localStorage.getItem('vacances_tab')
+    return (saved === 'groupes' || saved === 'table') ? saved : 'table'
+  })
+
+  const handleTabChange = (newTab: 'table' | 'groupes') => {
+    setTab(newTab)
+    localStorage.setItem('vacances_tab', newTab)
+  }
   const [jour, setJour] = useState<Jour>('Lundi')
   const [heureDebut, setHeureDebut] = useState<HeureDebut>('08:30')
   const [results, setResults] = useState<string[]>([])
@@ -49,7 +57,7 @@ export default function VacancesPage(): React.ReactElement {
         >
           <button
             type="button"
-            onClick={() => setTab('table')}
+            onClick={() => handleTabChange('table')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -72,7 +80,7 @@ export default function VacancesPage(): React.ReactElement {
 
           <button
             type="button"
-            onClick={() => setTab('groupes')}
+            onClick={() => handleTabChange('groupes')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',

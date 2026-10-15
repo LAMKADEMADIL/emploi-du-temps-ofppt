@@ -32,7 +32,8 @@ export const translations: Translations = {
   'common.confirmDelete': { ar: 'هل أنت متأكد من الحذف؟', fr: 'Êtes-vous sûr de vouloir supprimer ?' },
 
   // Sidebar
-  'nav.dashboard': { ar: 'لوحة القيادة', fr: 'Tableau de bord' },
+  'nav.hub': { ar: 'الرئيسية (Hub OFPPT)', fr: 'Tableau Principal (Hub)' },
+  'nav.dashboard': { ar: 'الإحصائيات العامة', fr: 'Statistiques' },
   'nav.formateurs': { ar: 'المكونون', fr: 'Formateurs' },
   'nav.stage': { ar: 'التدريب (Stage)', fr: 'Stages en entreprise' },
   'nav.dn': { ar: 'بنية الشعب (DN)', fr: 'Structure (DN)' },

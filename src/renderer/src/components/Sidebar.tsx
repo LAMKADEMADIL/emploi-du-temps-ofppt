@@ -30,7 +30,8 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
   const { t } = useTranslation()
 
   const navItems = [
-    { id: 'dashboard' as NavPage, label: 'nav.dashboard', icon: <LayoutDashboard size={22} />, section: 'nav.section.main' },
+    { id: 'hub' as NavPage, label: 'nav.hub', icon: <LayoutDashboard size={22} />, section: 'nav.section.main' },
+    { id: 'dashboard' as NavPage, label: 'nav.dashboard', icon: <Grid3X3 size={22} /> },
     { id: 'formateurs' as NavPage, label: 'nav.formateurs', icon: <Users size={22} />, section: 'nav.section.data' },
     { id: 'stage' as NavPage, label: 'nav.stage', icon: <Briefcase size={22} /> },
     { id: 'dn' as NavPage, label: 'nav.dn', icon: <Database size={22} /> },

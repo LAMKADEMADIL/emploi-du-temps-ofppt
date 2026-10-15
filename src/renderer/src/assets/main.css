@@ -1139,3 +1139,31 @@ tbody tr:last-child td {
   .dashboard-grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }
 }
+
+/* ============================
+   PRINT STYLES FOR OFFICIAL SHEET
+   ============================ */
+@media print {
+  .sidebar,
+  .sidebar-floating-toggle-btn,
+  .btn,
+  .page-header {
+    display: none !important;
+  }
+  .app-layout {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  #ofppt-official-sheet {
+    border: 2px solid #000 !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}

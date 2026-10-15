@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import './assets/main.css'
 import Sidebar from './components/Sidebar'
+import HubPage from './pages/HubPage'
 import Dashboard from './pages/Dashboard'
 import FormateursPage from './pages/FormateursPage'
 import StagePage from './pages/StagePage'
@@ -20,7 +21,7 @@ import { seedDemoData, migrateSalles } from './lib/seedData'
 import { Menu } from 'lucide-react'
 
 function AppContent(): React.ReactElement {
-  const [currentPage, setCurrentPage] = useState<NavPage>('dashboard')
+  const [currentPage, setCurrentPage] = useState<NavPage>('hub')
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     const saved = localStorage.getItem('sidebar_open')
     return saved !== null ? saved === 'true' : true
@@ -60,6 +61,7 @@ function AppContent(): React.ReactElement {
 
   const renderPage = (): React.ReactElement => {
     switch (currentPage) {
+      case 'hub': return <HubPage onNavigate={setCurrentPage} />
       case 'dashboard': return <Dashboard onNavigate={setCurrentPage} />
       case 'formateurs': return <FormateursPage />
       case 'stage': return <StagePage />
