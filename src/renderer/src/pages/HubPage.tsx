@@ -94,13 +94,22 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   const [groupes, setGroupes] = useState<Groupe[]>([])
   const [filieres, setFilieres] = useState<Filiere[]>([])
   
-  // Selection
+  // Selection - Formateur
   const [selectedProfName, setSelectedProfName] = useState<string | null>(null)
   const [selectedProfFiliere, setSelectedProfFiliere] = useState<string>('TFM')
   const [profSchedule, setProfSchedule] = useState<ScheduleMap>({})
   const [statut, setStatut] = useState<'statutaire' | 'cooperant' | 'vacataire' | 'contrat'>('statutaire')
   const [activeCellKey, setActiveCellKey] = useState<string | null>(null)
   const [cellEditModal, setCellEditModal] = useState<{ day: string; slotIdx: number } | null>(null)
+
+  // Selection - Section Timetable
+  const [selectedSection, setSelectedSection] = useState<{
+    filiereCode: string
+    anneeLabel: string // '1ère Année' | '2ème Année'
+    groupes: Groupe[]
+    schedule: Record<string, { nomFormateur: string; nomSalle: string }> // key: `${jour}__${groupeId}__${tsIdx}`
+    loading: boolean
+  } | null>(null)
 
   // Cell edit state
   const [editGroupe, setEditGroupe] = useState('')
@@ -198,6 +207,60 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     // Fallback: sorted alphabetically
     return [...DEFAULT_FALLBACK_COLS].sort((a, b) => a.filiere.localeCompare(b.filiere))
   }, [filieres, formateurs, groupes])
+
+  // ── Open Section Timetable ──────────────────────────────────────────────────
+  async function openSectionTimetable(groupeCodeSample: string, filiereCode: string, anneeLabel: string) {
+    // Determine year digit: 1xx → snée 1, 2xx → snnée 2
+    const yearDigit = groupeCodeSample.match(/([12])\d\d/)?.[1] || '1'
+
+    // Get all groups of same filiere & same year
+    const sectionGroupes = groupes.filter(g => {
+      const code = g.code_groupe.toUpperCase().replace(/\s+/g, '')
+      const filCode = filiereCode.toUpperCase().replace(/\s+/g, '')
+      // Matches filiere prefix + year digit
+      return (code.startsWith(filCode) || g.id_filiere === filieres.find(f => f.code_filiere.toUpperCase() === filCode)?.id) &&
+        code.match(new RegExp(`${yearDigit}\\d\\d$`))
+    }).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
+
+    setSelectedSection({
+      filiereCode,
+      anneeLabel,
+      groupes: sectionGroupes,
+      schedule: {},
+      loading: true
+    })
+
+    try {
+      // Fetch all seances from Firebase
+      const allSeances = await seancesService.getAll()
+      const groupeIds = new Set(sectionGroupes.map(g => g.id!))
+      const sectionSeances = allSeances.filter(s => groupeIds.has(s.id_groupe))
+
+      // Build lookup maps
+      const formateursMap = new Map(formateurs.map(f => [f.id!, f]))
+      const sallesMap = new Map(salles.map(s => [s.id!, s]))
+
+      // Build schedule map: key = `${jour}__${id_groupe}__${tsIdx}`
+      const schedule: Record<string, { nomFormateur: string; nomSalle: string }> = {}
+      for (const seance of sectionSeances) {
+        const tsIdx = ['08:30', '11:00', '13:30', '16:00'].indexOf(seance.heure_debut)
+        if (tsIdx === -1) continue
+        const key = `${seance.jour}__${seance.id_groupe}__${tsIdx}`
+        const formateur = formateursMap.get(seance.id_formateur)
+        const salle = sallesMap.get(seance.id_salle)
+        schedule[key] = {
+          nomFormateur: formateur ? (formateur.nom || formateur.nom_prenom || seance.id_formateur).toUpperCase() : seance.id_formateur,
+          nomSalle: salle ? salle.nom_salle.toUpperCase() : seance.id_salle
+        }
+      }
+
+      setSelectedSection(prev => prev ? { ...prev, schedule, loading: false } : null)
+    } catch (err) {
+      console.error(err)
+      toast.error('Erreur lors du chargement du planning de la section')
+      setSelectedSection(prev => prev ? { ...prev, loading: false } : null)
+    }
+  }
 
   // Load schedule for a formateur (from localStorage or firebase planning)
   async function openFormateurSchedule(profName: string, filiereCode: string) {
@@ -432,6 +495,196 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   // ═══════════════════════════════════════════════════════════════════════════
   // VUE 2: EMPLOI DU TEMPS DU FORMATEUR (FACE A FACE)
   // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // VUE 3: EMPLOI DU TEMPS DE LA SECTION
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (selectedSection) {
+    const JOURS_LIST = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
+    const TS_LABELS = ['8h30 - 11h00', '11h00 - 13h30', '13h30 - 16h00', '16h00 - 18h30']
+    const anneeFormation = localStorage.getItem('annee_formation_groupe') || '2025-2026'
+    const periodeApp = localStorage.getItem('periode_application_groupe') || 'Avril 2026'
+
+    return (
+      <div className="fade-in-up" style={{ padding: '8px 16px 50px', background: '#f8fafc', minHeight: '100vh', overflowY: 'auto' }}>
+        {/* Top bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setSelectedSection(null)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontWeight: 700 }}
+          >
+            <ArrowLeft size={18} />
+            Retour au tableau principal
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => window.print()}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontWeight: 600 }}
+          >
+            <Printer size={18} />
+            Imprimer / PDF
+          </button>
+        </div>
+
+        {/* Official Document */}
+        <div
+          id="section-official-sheet"
+          style={{
+            background: '#ffffff',
+            border: '2px solid #000000',
+            borderRadius: 8,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            padding: 20,
+            maxWidth: 1300,
+            margin: '0 auto',
+            color: '#000000'
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 12, borderBottom: '2px solid #000', paddingBottom: 12, marginBottom: 12, alignItems: 'center' }}>
+            <img src={ofpptLogo} alt="OFPPT Logo" style={{ width: 90, height: 60, objectFit: 'contain' }} />
+            <div style={{ textAlign: 'center' }}>
+              <h1 style={{ fontSize: 19, fontWeight: 900, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                EMPLOI DU TEMPS DE LA SECTION
+              </h1>
+              <div style={{ fontSize: 14, fontWeight: 800 }}>ANNEE DE FORMATION : {anneeFormation}</div>
+            </div>
+          </div>
+
+          {/* Info Block */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 14, fontSize: 13 }}>
+            <div><strong>DRGC</strong></div>
+            <div style={{ textAlign: 'right' }}><strong>Période d'application: {periodeApp}</strong></div>
+            <div><strong>Complexe/EFP :</strong> CFP IMME/ISTA MY RACHID</div>
+            <div><strong>Filière :</strong> {selectedSection.filiereCode}</div>
+            <div><strong>Niveau :</strong> {selectedSection.anneeLabel}</div>
+            <div><strong>Mode de formation :</strong> FPA</div>
+          </div>
+
+          {/* Loading state */}
+          {selectedSection.loading ? (
+            <div style={{ textAlign: 'center', padding: 40, fontSize: 16, color: '#64748b' }}>
+              <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
+              <br />Chargement du planning...
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: '#1e3a5f', color: '#ffffff' }}>
+                    <th style={{ padding: '8px 6px', border: '1.5px solid #000', fontWeight: 900, fontSize: 13, width: 80 }}>JOUR</th>
+                    <th style={{ padding: '8px 6px', border: '1.5px solid #000', fontWeight: 900, fontSize: 13, width: 75 }}>GROUPE</th>
+                    {TS_LABELS.map((lbl, i) => (
+                      <th key={i} style={{ padding: '8px 4px', border: '1.5px solid #000', fontWeight: 900, fontSize: 12, textAlign: 'center' }}>{lbl}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {JOURS_LIST.map((jour, jourIdx) => (
+                    <React.Fragment key={jour}>
+                      {selectedSection.groupes.map((groupe, grpIdx) => {
+                        const isEnStage = groupe.en_stage
+                        const rowBg = jourIdx % 2 === 0 ? '#f8fafc' : '#ffffff'
+                        return (
+                          <tr key={groupe.id} style={{ background: rowBg }}>
+                            {/* Day cell - only first group of day */}
+                            {grpIdx === 0 && (
+                              <td
+                                rowSpan={selectedSection.groupes.length}
+                                style={{
+                                  border: '2px solid #000',
+                                  textAlign: 'center',
+                                  fontWeight: 900,
+                                  fontSize: 13,
+                                  background: '#1e3a5f',
+                                  color: '#ffffff',
+                                  verticalAlign: 'middle',
+                                  padding: '4px 2px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 1
+                                }}
+                              >
+                                {jour.toUpperCase()}
+                              </td>
+                            )}
+                            {/* Groupe code */}
+                            <td style={{
+                              border: '1.5px solid #000',
+                              textAlign: 'center',
+                              fontWeight: 800,
+                              fontSize: 11.5,
+                              padding: '4px 2px',
+                              background: isEnStage ? '#fef3c7' : undefined,
+                              color: isEnStage ? '#92400e' : '#000'
+                            }}>
+                              {groupe.code_groupe}
+                            </td>
+                            {/* Time slots */}
+                            {[0, 1, 2, 3].map(tsIdx => {
+                              const key = `${jour}__${groupe.id}__${tsIdx}`
+                              const cell = selectedSection.schedule[key]
+                              if (isEnStage) {
+                                return (
+                                  <td key={tsIdx} style={{
+                                    border: '1.5px solid #000',
+                                    textAlign: 'center',
+                                    fontSize: 11,
+                                    fontStyle: 'italic',
+                                    fontWeight: 700,
+                                    color: '#92400e',
+                                    background: '#fef9c3',
+                                    padding: '4px 2px'
+                                  }}>Stage</td>
+                                )
+                              }
+                              return (
+                                <td key={tsIdx} style={{
+                                  border: '1.5px solid #000',
+                                  textAlign: 'center',
+                                  fontSize: 11,
+                                  padding: '4px 2px',
+                                  fontWeight: cell ? 800 : 400,
+                                  color: cell ? '#1d4ed8' : '#94a3b8',
+                                  background: cell ? '#eff6ff' : undefined
+                                }}>
+                                  {cell ? `${cell.nomFormateur} - ${cell.nomSalle}` : ''}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      })}
+                      {/* Separator row between days */}
+                      {jourIdx < JOURS_LIST.length - 1 && (
+                        <tr>
+                          <td colSpan={selectedSection.groupes.length > 0 ? 6 : 6} style={{ height: 6, background: '#e2e8f0', border: '1px solid #cbd5e1' }} />
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+
+              {selectedSection.groupes.length === 0 && (
+                <div style={{ textAlign: 'center', padding: 32, color: '#64748b', fontSize: 15 }}>
+                  <AlertCircle size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
+                  <br />Aucun groupe trouvé pour cette section dans la base de données.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Footer signatures */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', border: '2px solid #000', borderTop: 'none', textAlign: 'center', padding: '16px 0 40px', marginTop: -2 }}>
+            <div style={{ borderRight: '1.5px solid #000', fontWeight: 900, fontSize: 13 }}>Formateur</div>
+            <div style={{ borderRight: '1.5px solid #000', fontWeight: 900, fontSize: 13 }}>Directeur / Directeur Pédagogique</div>
+            <div style={{ fontWeight: 900, fontSize: 13 }}>Directeur du Complexe</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (selectedProfName) {
     return (
       <div className="fade-in-up" style={{ padding: '8px 16px 50px', background: '#f8fafc', minHeight: '100vh', overflowY: 'auto' }}>
@@ -956,43 +1209,83 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   ))}
                 </tr>
 
-                {/* Annee 1 Row */}
+                {/* Annee 1 Row - Clickable */}
                 <tr style={{ background: '#ffffff', fontWeight: 800 }}>
                   {displayFilieresCols.map((col, colIdx) => (
                     <td
                       key={colIdx}
                       style={{
-                        padding: '6px 4px',
+                        padding: '4px 4px',
                         borderRight: colIdx < displayFilieresCols.length - 1 ? '1.5px solid #000' : 'none',
                         borderBottom: '1.5px solid #000',
                         fontSize: 12,
                         color: '#000'
                       }}
                     >
-                      {col.annee1}
+                      <button
+                        type="button"
+                        onClick={() => openSectionTimetable(col.annee1, col.filiere, 'T 1ère Année')}
+                        style={{
+                          width: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontWeight: 900,
+                          fontSize: 12,
+                          color: '#1d4ed8',
+                          cursor: 'pointer',
+                          padding: '2px 0',
+                          textDecoration: 'underline',
+                          transition: 'transform 0.1s, color 0.1s'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = '#1e3a8a'; e.currentTarget.style.transform = 'scale(1.06)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = '#1d4ed8'; e.currentTarget.style.transform = 'scale(1)' }}
+                        title={`Voir le planning de la section ${col.annee1}`}
+                      >
+                        {col.annee1}
+                      </button>
                     </td>
                   ))}
                 </tr>
 
-                {/* Annee 2 Row */}
+                {/* Annee 2 Row - Clickable */}
                 <tr style={{ background: '#ffffff', fontWeight: 800 }}>
                   {displayFilieresCols.map((col, colIdx) => (
                     <td
                       key={colIdx}
                       style={{
-                        padding: '6px 4px',
+                        padding: '4px 4px',
                         borderRight: colIdx < displayFilieresCols.length - 1 ? '1.5px solid #000' : 'none',
                         borderBottom: col.anneeExtra ? '1.5px solid #000' : 'none',
                         fontSize: 12,
                         color: '#000'
                       }}
                     >
-                      {col.annee2}
+                      <button
+                        type="button"
+                        onClick={() => openSectionTimetable(col.annee2, col.filiere, 'T 2ème Année')}
+                        style={{
+                          width: '100%',
+                          border: 'none',
+                          background: 'transparent',
+                          fontWeight: 900,
+                          fontSize: 12,
+                          color: '#1d4ed8',
+                          cursor: 'pointer',
+                          padding: '2px 0',
+                          textDecoration: 'underline',
+                          transition: 'transform 0.1s, color 0.1s'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = '#1e3a8a'; e.currentTarget.style.transform = 'scale(1.06)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = '#1d4ed8'; e.currentTarget.style.transform = 'scale(1)' }}
+                        title={`Voir le planning de la section ${col.annee2}`}
+                      >
+                        {col.annee2}
+                      </button>
                     </td>
                   ))}
                 </tr>
 
-                {/* Annee Extra Row (e.g. CDS) */}
+                {/* Annee Extra Row (e.g. CDS) - Clickable if exists */}
                 <tr style={{ background: '#ffffff', fontWeight: 800 }}>
                   {displayFilieresCols.map((col, colIdx) => (
                     <td
@@ -1004,7 +1297,29 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                         color: '#475569'
                       }}
                     >
-                      {col.anneeExtra || ''}
+                      {col.anneeExtra ? (
+                        <button
+                          type="button"
+                          onClick={() => openSectionTimetable(col.anneeExtra!, col.filiere, 'CDS')}
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            background: 'transparent',
+                            fontWeight: 800,
+                            fontSize: 11,
+                            color: '#7c3aed',
+                            cursor: 'pointer',
+                            padding: '2px 0',
+                            textDecoration: 'underline',
+                            transition: 'transform 0.1s'
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.06)' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
+                          title={`Voir le planning de la section ${col.anneeExtra}`}
+                        >
+                          {col.anneeExtra}
+                        </button>
+                      ) : ''}
                     </td>
                   ))}
                 </tr>
