@@ -113,6 +113,15 @@ body {
   overflow: hidden;
 }
 
+/* Main content area - scrollable */
+.main-content {
+  flex: 1;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+}
+
 /* ============================
    SIDEBAR
    ============================ */
