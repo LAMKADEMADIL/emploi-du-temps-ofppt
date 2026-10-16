@@ -505,7 +505,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     const periodeApp = localStorage.getItem('periode_application_groupe') || 'Avril 2026'
 
     return (
-      <div className="fade-in-up" style={{ padding: '8px 16px 60px', background: '#eef2f7', minHeight: '100%' }}>
+      <div className="fade-in-up" style={{ height: '100vh', overflowY: 'auto', overflowX: 'hidden', padding: '8px 16px 60px', background: '#eef2f7' }}>
 
         {/* ── Top bar ─────────────────────────── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -689,7 +689,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
 
   if (selectedProfName) {
     return (
-      <div className="fade-in-up" style={{ padding: '8px 16px 50px', background: '#f8fafc', minHeight: '100%' }}>
+      <div className="fade-in-up" style={{ height: '100vh', overflowY: 'auto', overflowX: 'hidden', padding: '8px 16px 50px', background: '#f8fafc' }}>
         {/* Top bar with back button & Print */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <button
@@ -1088,7 +1088,10 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     <div
       className="fade-in-up"
       style={{
-        padding: '12px 18px 80px'
+        padding: '12px 18px 80px',
+        height: '100vh',
+        overflowY: 'auto',
+        overflowX: 'hidden'
       }}
     >
       {/* Top Banner / Header */}
