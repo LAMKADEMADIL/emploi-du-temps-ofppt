@@ -568,9 +568,10 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     toast.success('Cellule vidée avec succès')
   }
 
-  // Synchroniser Salle
-  async function handleSynchroniserSalle() {
+  // ── Synchroniser Salle (avec demande de confirmation préalable) ─────────
+  async function executeSynchroniserSalle() {
     if (!selectedProfName) return
+    const toastId = toast.loading(lang === 'ar' ? 'جاري المزامنة والحفظ...' : 'Synchronisation en cours...')
     try {
       let count = 0
       const profObj = formateurs.find(f => 
@@ -600,15 +601,101 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           count++
         }
       }
-      toast.success(`✅ ${count} séances synchronisées avec le Planning des Salles !`)
+      toast.dismiss(toastId)
+      toast.success(
+        lang === 'ar'
+          ? `✅ تم تأكيد ومزامنة وحفظ ${count} حصة مع جدول القاعات بنجاح !`
+          : `✅ ${count} séances synchronisées avec le Planning des Salles !`,
+        { duration: 4000 }
+      )
     } catch (e) {
-      toast.error('Erreur lors de la synchronisation des salles')
+      console.error(e)
+      toast.dismiss(toastId)
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء المزامنة' : 'Erreur lors de la synchronisation des salles')
     }
   }
 
-  // Dé-synchroniser Salle
-  async function handleDesynchroniserSalle() {
+  function handleSynchroniserSalle() {
     if (!selectedProfName) return
+    const count = Object.values(profSchedule).filter(s => s.salle && s.salle.trim()).length
+    if (count === 0) {
+      toast(
+        lang === 'ar' ? 'لا توجد حصص محددة بقاعات لمزامنتها حالياً' : 'Aucune séance avec salle attribuée à synchroniser',
+        { icon: 'ℹ️' }
+      )
+      return
+    }
+
+    toast(
+      (t) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 290, maxWidth: 390 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>⚠️</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>
+                {lang === 'ar' ? 'تأكيد مزامنة القاعات' : 'Confirmer la synchronisation'}
+              </div>
+              <div style={{ fontSize: 12, color: '#475569', marginTop: 3, lineHeight: 1.45 }}>
+                {lang === 'ar'
+                  ? `هل تريد تأكيد مزامنة وحفظ ${count} حصة للأستاذ (${selectedProfName}) في جدول القاعات ؟`
+                  : `Voulez-vous synchroniser et enregistrer les ${count} séance(s) de ${selectedProfName} avec le Planning des Salles ?`}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              style={{
+                padding: '5px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                background: '#f1f5f9',
+                color: '#475569',
+                border: '1px solid #cbd5e1',
+                borderRadius: 6,
+                cursor: 'pointer'
+              }}
+            >
+              {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                toast.dismiss(t.id)
+                executeSynchroniserSalle()
+              }}
+              style={{
+                padding: '5px 14px',
+                fontSize: 12,
+                fontWeight: 700,
+                background: '#2563eb',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 6,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                boxShadow: '0 2px 4px rgba(37,99,235,0.3)'
+              }}
+            >
+              <span>{lang === 'ar' ? 'تأكيد وحفظ' : 'Confirmer & Enregistrer'}</span>
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        id: 'confirm-sync-salle',
+        duration: 20000
+      }
+    )
+  }
+
+  // ── Dé-synchroniser Salle (avec confirmation) ───────────────────────────
+  async function executeDesynchroniserSalle() {
+    if (!selectedProfName) return
+    const toastId = toast.loading(lang === 'ar' ? 'جاري تحرير القاعات...' : 'Libération des salles...')
     try {
       let count = 0
       for (const [key, slot] of Object.entries(profSchedule)) {
@@ -620,14 +707,99 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           count++
         }
       }
-      toast.success(`✅ ${count} salles dé-synchronisées et libérées dans le Planning !`)
+      toast.dismiss(toastId)
+      toast.success(
+        lang === 'ar'
+          ? `✅ تم تحرير ${count} قاعة وإلغاء مزامنتها بنجاح !`
+          : `✅ ${count} salles dé-synchronisées et libérées dans le Planning !`,
+        { duration: 4000 }
+      )
     } catch (e) {
-      toast.error('Erreur lors de la dé-synchronisation')
+      console.error(e)
+      toast.dismiss(toastId)
+      toast.error(lang === 'ar' ? 'خطأ أثناء العملية' : 'Erreur lors de la dé-synchronisation')
     }
   }
 
-  // Vider cellule groupe: clears only the groups from the formateur timetable
-  function handleViderCelluleGroupe() {
+  function handleDesynchroniserSalle() {
+    if (!selectedProfName) return
+    const count = Object.values(profSchedule).filter(s => s.salle && s.salle.trim()).length
+    if (count === 0) {
+      toast(
+        lang === 'ar' ? 'لا توجد قاعات مخصصة لإلغاء مزامنتها' : 'Aucune salle à dé-synchroniser',
+        { icon: 'ℹ️' }
+      )
+      return
+    }
+
+    toast(
+      (t) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 290, maxWidth: 390 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>🗑️</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>
+                {lang === 'ar' ? 'تأكيد إلغاء المزامنة' : 'Confirmer la dé-synchronisation'}
+              </div>
+              <div style={{ fontSize: 12, color: '#475569', marginTop: 3, lineHeight: 1.45 }}>
+                {lang === 'ar'
+                  ? `هل تريد تأكيد تحرير ${count} قاعة للأستاذ (${selectedProfName}) من جدول القاعات ؟`
+                  : `Voulez-vous libérer et dé-synchroniser les ${count} salle(s) de ${selectedProfName} du Planning ?`}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              style={{
+                padding: '5px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                background: '#f1f5f9',
+                color: '#475569',
+                border: '1px solid #cbd5e1',
+                borderRadius: 6,
+                cursor: 'pointer'
+              }}
+            >
+              {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                toast.dismiss(t.id)
+                executeDesynchroniserSalle()
+              }}
+              style={{
+                padding: '5px 14px',
+                fontSize: 12,
+                fontWeight: 700,
+                background: '#dc2626',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 6,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                boxShadow: '0 2px 4px rgba(220,38,38,0.3)'
+              }}
+            >
+              <span>{lang === 'ar' ? 'تأكيد التحرير' : 'Confirmer la libération'}</span>
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        id: 'confirm-desync-salle',
+        duration: 20000
+      }
+    )
+  }
+
+  // ── Vider cellule groupe (avec confirmation) ───────────────────────────
+  function executeViderCelluleGroupe() {
     if (!selectedProfName) return
     const updated: ScheduleMap = {}
     let count = 0
@@ -641,8 +813,83 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     saveSchedule(updated)
     toast.success(
       lang === 'ar'
-        ? `تم إخلاء الأفواج (${count}) من جدول الحصص`
-        : `Les groupes (${count}) ont été vidés de l'emploi du temps`
+        ? `✅ تم إخلاء الأفواج (${count}) من جدول الحصص بنجاح`
+        : `✅ Les groupes (${count}) ont été vidés de l'emploi du temps`,
+      { duration: 4000 }
+    )
+  }
+
+  function handleViderCelluleGroupe() {
+    if (!selectedProfName) return
+    const count = Object.values(profSchedule).filter(s => s.groupe && s.groupe !== '-').length
+    if (count === 0) {
+      toast(
+        lang === 'ar' ? 'لا توجد مجموعات لإخلائها' : 'Aucun groupe à vider',
+        { icon: 'ℹ️' }
+      )
+      return
+    }
+
+    toast(
+      (t) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 290, maxWidth: 390 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>⚠️</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>
+                {lang === 'ar' ? 'تأكيد إخلاء المجموعات' : 'Confirmer l\'effacement des groupes'}
+              </div>
+              <div style={{ fontSize: 12, color: '#475569', marginTop: 3, lineHeight: 1.45 }}>
+                {lang === 'ar'
+                  ? `هل تريد مسح وإخلاء ${count} فوج من جدول الأستاذ (${selectedProfName}) ؟`
+                  : `Voulez-vous vider les ${count} groupe(s) de cet emploi du temps ?`}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              style={{
+                padding: '5px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                background: '#f1f5f9',
+                color: '#475569',
+                border: '1px solid #cbd5e1',
+                borderRadius: 6,
+                cursor: 'pointer'
+              }}
+            >
+              {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                toast.dismiss(t.id)
+                executeViderCelluleGroupe()
+              }}
+              style={{
+                padding: '5px 14px',
+                fontSize: 12,
+                fontWeight: 700,
+                background: '#dc2626',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 6,
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(220,38,38,0.3)'
+              }}
+            >
+              <span>{lang === 'ar' ? 'تأكيد الإخلاء' : 'Confirmer l\'effacement'}</span>
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        id: 'confirm-vider-groupe',
+        duration: 20000
+      }
     )
   }
 
