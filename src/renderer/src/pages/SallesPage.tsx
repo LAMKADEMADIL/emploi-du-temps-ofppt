@@ -51,9 +51,64 @@ export default function SallesPage(): React.ReactElement {
   async function loadSalles() {
     try {
       setLoading(true)
-      setSalles(await sallesService.getAll())
-    } catch { toast.error('حدث خطأ أثناء تحميل البيانات') }
-    finally { setLoading(false) }
+      const data = await sallesService.getAll()
+      setSalles(data)
+    } catch {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء تحميل البيانات' : 'Erreur lors du chargement des données')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // حساب عدد القاعات المكررة بدقة
+  const duplicateCount = React.useMemo(() => {
+    const seen = new Set<string>()
+    let count = 0
+    salles.forEach(s => {
+      const clean = (s.nom_salle || '').trim().toUpperCase()
+      if (seen.has(clean)) count++
+      else seen.add(clean)
+    })
+    return count
+  }, [salles])
+
+  // إزالة النسخ المكررة تلقائياً من Firebase
+  async function handleRemoveDuplicates() {
+    try {
+      setResetting(true)
+      const allSalles = await sallesService.getAll()
+      const seen = new Set<string>()
+      const duplicatesToDelete: string[] = []
+
+      for (const s of allSalles) {
+        const clean = (s.nom_salle || '').trim().toUpperCase()
+        if (seen.has(clean)) {
+          if (s.id) duplicatesToDelete.push(s.id)
+        } else {
+          seen.add(clean)
+        }
+      }
+
+      if (duplicatesToDelete.length === 0) {
+        toast.success(lang === 'ar' ? 'لا توجد قاعات مكررة' : 'Aucun doublon trouvé')
+        return
+      }
+
+      for (const id of duplicatesToDelete) {
+        await sallesService.delete(id)
+      }
+
+      toast.success(
+        lang === 'ar'
+          ? `✅ تم حذف ${duplicatesToDelete.length} قاعة مكررة بنجاح!`
+          : `✅ ${duplicatesToDelete.length} salle(s) en double supprimée(s) !`
+      )
+      loadSalles()
+    } catch {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء إزالة التكرارات' : 'Erreur lors de la suppression des doublons')
+    } finally {
+      setResetting(false)
+    }
   }
 
   async function handleResetSalles() {
@@ -67,8 +122,11 @@ export default function SallesPage(): React.ReactElement {
       for (const s of SALLES_OFFICIELLES) await sallesService.add(s)
       toast.success(lang === 'ar' ? '✅ تم تحديث القاعات (27 قاعة)' : '✅ Salles réinitialisées (27 salles)')
       loadSalles()
-    } catch { toast.error('حدث خطأ أثناء إعادة التعيين') }
-    finally { setResetting(false) }
+    } catch {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء إعادة التعيين' : 'Erreur lors de la réinitialisation')
+    } finally {
+      setResetting(false)
+    }
   }
 
   function openModal(salle?: Salle) {
@@ -78,30 +136,55 @@ export default function SallesPage(): React.ReactElement {
     setIsModalOpen(true)
   }
 
-  function closeModal() { setIsModalOpen(false); setEditingId(null) }
+  function closeModal() {
+    setIsModalOpen(false)
+    setEditingId(null)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!nomSalle) { toast.error('الرجاء إدخال اسم القاعة'); return }
+    if (!nomSalle.trim()) {
+      toast.error(lang === 'ar' ? 'الرجاء إدخال اسم القاعة' : 'Veuillez entrer le nom de la salle')
+      return
+    }
+
+    const cleanName = nomSalle.trim().toUpperCase()
+    const isDuplicate = salles.some(
+      s => s.id !== editingId && (s.nom_salle || '').trim().toUpperCase() === cleanName
+    )
+    if (isDuplicate) {
+      toast.error(
+        lang === 'ar'
+          ? `القاعة "${nomSalle.trim()}" موجودة بالفعل في قاعدة البيانات!`
+          : `La salle « ${nomSalle.trim()} » existe déjà dans la base !`
+      )
+      return
+    }
+
     try {
       if (editingId) {
-        await sallesService.update(editingId, { nom_salle: nomSalle, type_salle: typeSalle })
-        toast.success('تم التحديث بنجاح')
+        await sallesService.update(editingId, { nom_salle: nomSalle.trim(), type_salle: typeSalle })
+        toast.success(lang === 'ar' ? 'تم التحديث بنجاح' : 'Mis à jour avec succès')
       } else {
-        await sallesService.add({ nom_salle: nomSalle, type_salle: typeSalle })
-        toast.success('تمت الإضافة بنجاح')
+        await sallesService.add({ nom_salle: nomSalle.trim(), type_salle: typeSalle })
+        toast.success(lang === 'ar' ? 'تمت الإضافة بنجاح' : 'Ajouté avec succès')
       }
-      closeModal(); loadSalles()
-    } catch { toast.error('حدث خطأ أثناء الحفظ') }
+      closeModal()
+      loadSalles()
+    } catch {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء الحفظ' : "Erreur lors de l'enregistrement")
+    }
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm('هل أنت متأكد من حذف هذه القاعة؟')) return
+    if (!window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف هذه القاعة؟' : 'Êtes-vous sûr de vouloir supprimer cette salle ?')) return
     try {
       await sallesService.delete(id)
-      toast.success('تم الحذف بنجاح')
+      toast.success(lang === 'ar' ? 'تم الحذف بنجاح' : 'Supprimé avec succès')
       loadSalles()
-    } catch { toast.error('حدث خطأ أثناء الحذف') }
+    } catch {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء الحذف' : 'Erreur lors de la suppression')
+    }
   }
 
   return (
@@ -109,12 +192,67 @@ export default function SallesPage(): React.ReactElement {
       <div className="page-header">
         <div className="page-header-info">
           <h1>{lang === 'ar' ? 'إدارة القاعات والورشات' : 'Salles et Ateliers'}</h1>
-          <p>{lang === 'ar' ? 'إدارة وتصنيف الأماكن المخصصة للتدريس والتدريب' : 'Gestion des salles de cours et ateliers pratiques'}</p>
+          <p>
+            {lang === 'ar'
+              ? `إدارة وتصنيف القاعات والورشات (${salles.length} مسجلة في قاعدة البيانات)`
+              : `Gestion des salles et ateliers (${salles.length} enregistrée(s) dans la base de données)`}
+          </p>
         </div>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Duplicate cleaner button if duplicates exist */}
+          {duplicateCount > 0 && (
+            <button
+              type="button"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '10px 16px',
+                fontSize: '13.5px',
+                fontWeight: 800,
+                background: '#fef2f2',
+                color: '#dc2626',
+                border: '1.5px solid #ef4444',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(239, 68, 68, 0.15)'
+              }}
+              onClick={handleRemoveDuplicates}
+              disabled={resetting}
+              title={lang === 'ar' ? 'إزالة كافة النسخ المكررة من قاعدة البيانات' : 'Supprimer automatiquement tous les doublons de la base'}
+            >
+              <Trash2 size={16} />
+              {lang === 'ar'
+                ? `حذف التكرارات (${duplicateCount})`
+                : `Supprimer les doublons (${duplicateCount})`}
+            </button>
+          )}
+
+          {/* Reset to official 27 rooms button */}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{
+              padding: '10px 18px',
+              fontSize: '13.5px',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              borderRadius: 'var(--radius-md)'
+            }}
+            onClick={handleResetSalles}
+            disabled={resetting}
+            title={lang === 'ar' ? 'إعادة ضبط القاعات للقائمة الرسمية الـ 27' : 'Réinitialiser aux 27 salles officielles'}
+          >
+            <RefreshCw size={15} style={resetting ? { animation: 'spin 1s linear infinite' } : {}} />
+            {lang === 'ar' ? 'إعادة تعيين الرسمية (27)' : 'Réinitialiser (27 salles)'}
+          </button>
+
+          {/* Add Room Button */}
           <button
             className="btn btn-primary"
-            style={{ padding: '11px 22px', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}
+            style={{ padding: '10px 20px', fontSize: '14px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}
             onClick={() => openModal()}
           >
             <Plus size={18} /> {lang === 'ar' ? 'إضافة قاعة جديدة' : 'Ajouter une salle'}

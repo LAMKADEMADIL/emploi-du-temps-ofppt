@@ -49,13 +49,28 @@ const DEMO_FILIERES = [
   { code_filiere: 'TSGE', nom_filiere: 'Gestion des Entreprises' },
 ]
 
-// ── ترحيل تلقائي للقاعات إلى القائمة الرسمية ──────────────────────────────
+// ── ترحيل تلقائي للقاعات إلى القائمة الرسمية وتصفية التكرارات ─────────────
 export async function migrateSalles(): Promise<void> {
   try {
     const snap = await getDocs(collection(db, 'salles'))
     if (snap.empty) return
 
-    const existingNames = snap.docs.map(d => (d.data() as any).nom_salle as string)
+    // 1. الكشف التلقائي عن أي قاعات مكررة في قاعدة البيانات وحذف النسخ المكررة
+    const seen = new Set<string>()
+    const duplicates = snap.docs.filter((d) => {
+      const name = String((d.data() as any).nom_salle || '').trim().toUpperCase()
+      if (seen.has(name)) return true
+      seen.add(name)
+      return false
+    })
+
+    if (duplicates.length > 0) {
+      console.log(`Suppression automatique de ${duplicates.length} salles en double dans Firebase...`)
+      await Promise.all(duplicates.map((d) => deleteDoc(d.ref)))
+    }
+
+    const remainingSnap = await getDocs(collection(db, 'salles'))
+    const existingNames = remainingSnap.docs.map(d => (d.data() as any).nom_salle as string)
 
     // إذا وُجد أي اسم قديم → استبدل الكل
     const hasOld = existingNames.some(n => OLD_SALLE_NAMES.includes(n))
@@ -63,7 +78,7 @@ export async function migrateSalles(): Promise<void> {
 
     console.log('Migrating salles to official list...')
     // حذف القديمة
-    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+    await Promise.all(remainingSnap.docs.map(d => deleteDoc(d.ref)))
     // إضافة الرسمية
     for (const s of SALLES_OFFICIELLES) {
       await addDoc(collection(db, 'salles'), { ...s, createdAt: serverTimestamp() })
@@ -81,9 +96,13 @@ export async function seedDemoData(): Promise<boolean> {
       return false
     }
 
-    // Check if data already exists
-    const formateursSnap = await getDocs(collection(db, 'formateurs'))
-    if (!formateursSnap.empty) {
+    // Check if data already exists in any key collection
+    const [formateursSnap, sallesSnap] = await Promise.all([
+      getDocs(collection(db, 'formateurs')),
+      getDocs(collection(db, 'salles'))
+    ])
+
+    if (!formateursSnap.empty || !sallesSnap.empty) {
       localStorage.setItem('seed_demo_data_done', 'true')
       console.log('Data already exists, skipping seed.')
       return false
@@ -97,9 +116,11 @@ export async function seedDemoData(): Promise<boolean> {
       await addDoc(collection(db, 'formateurs'), { ...f, createdAt: serverTimestamp() })
     }
 
-    // Add salles (official list)
-    for (const s of SALLES_OFFICIELLES) {
-      await addDoc(collection(db, 'salles'), { ...s, createdAt: serverTimestamp() })
+    // Add salles (official list) - only if salles is completely empty
+    if (sallesSnap.empty) {
+      for (const s of SALLES_OFFICIELLES) {
+        await addDoc(collection(db, 'salles'), { ...s, createdAt: serverTimestamp() })
+      }
     }
 
     // Add filieres and then groupes
