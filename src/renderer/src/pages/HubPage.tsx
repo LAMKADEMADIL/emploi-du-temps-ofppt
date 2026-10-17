@@ -2931,22 +2931,34 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       {/* ── Modal Affectation Formateur Communication ───────────────────────── */}
       {commAssignModal && (
         <div
-          className="modal-overlay"
-          style={{ zIndex: 1350 }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1350,
+            padding: 20
+          }}
           onClick={() => {
             if (!isSavingAssign) setCommAssignModal(null)
           }}
         >
           <div
-            className="modal-content fade-in-up"
             style={{
-              maxWidth: 540,
-              width: '92%',
+              maxWidth: 560,
+              width: '100%',
               background: '#ffffff',
-              borderRadius: 10,
-              border: '2px solid #000',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
-              overflow: 'hidden'
+              borderRadius: 12,
+              border: '2px solid #000000',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.35)',
+              overflow: 'hidden',
+              margin: 'auto',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -2990,7 +3002,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
             </div>
 
             {/* Modal Body */}
-            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, overflowY: 'auto', maxHeight: 'calc(85vh - 130px)' }}>
               
               {/* Section 1: Formateurs actuellement affectés */}
               <div>
@@ -3040,10 +3052,11 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                           <button
                             type="button"
                             onClick={async () => {
+                              if (!prof.id) return
                               try {
                                 await formateursService.update(prof.id, { matiere: '' })
                                 setFormateurs(prev => prev.map(p => p.id === prof.id ? { ...p, matiere: '' } : p))
-                                toast.success(`${prof.nom} retiré de ${commAssignModal.module}`)
+                                toast.success(`${prof.nom || prof.nom_prenom} retiré de ${commAssignModal.module}`)
                               } catch (e) {
                                 toast.error('Erreur lors de la suppression')
                               }
@@ -3093,7 +3106,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   >
                     <option value="">-- Choisir un formateur dans la base --</option>
                     {formateurs
-                      .filter(f => !matchesModule(f.matiere, commAssignModal.module))
+                      .filter(f => Boolean(f.id) && !matchesModule(f.matiere, commAssignModal.module))
                       .sort((a, b) => (a.nom_prenom || a.nom || '').localeCompare(b.nom_prenom || b.nom || ''))
                       .map(f => (
                         <option key={f.id} value={f.id}>

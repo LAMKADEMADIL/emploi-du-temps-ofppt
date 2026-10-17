@@ -8,6 +8,7 @@ export interface Formateur {
   nom_prenom: string   // kept for backward compatibility
   prenom?: string
   nom?: string
+  specialite?: string
   groupes_assignes?: string[] // Array of group codes or IDs assigned to this formateur
   matiere?: string // e.g., 'Français', 'Anglais', 'Arabe', 'Soft Skills', 'Culture Entreprise', 'Culture Numérique', or 'Technique'
   createdAt?: Date
@@ -31,9 +32,13 @@ export interface Filiere {
 export interface Groupe {
   id?: string
   code_groupe: string
+  nom_groupe?: string
   en_stage: boolean
   id_filiere: string
   nom_filiere?: string // joined field
+  filiere?: string
+  annee?: number
+  effectif?: number
   createdAt?: Date
 }
 
