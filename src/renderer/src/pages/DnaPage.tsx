@@ -318,6 +318,82 @@ export default function DnaPage(): React.ReactElement {
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
 
+          {/* Hidden file input for Excel import */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={handleExcelUpload}
+          />
+
+          {/* Import DNA Excel Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '11px 18px',
+              fontSize: '14px',
+              fontWeight: 700,
+              background: isImporting ? '#86efac' : '#22c55e',
+              color: 'white',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              cursor: isImporting ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 8px rgba(34, 197, 94, 0.25)'
+            }}
+            onMouseEnter={(e) => {
+              if (!isImporting) e.currentTarget.style.background = '#16a34a'
+            }}
+            onMouseLeave={(e) => {
+              if (!isImporting) e.currentTarget.style.background = '#22c55e'
+            }}
+            title={lang === 'ar' ? 'استيراد ملف DNA من Excel' : 'Importer DNA depuis Excel'}
+          >
+            <FileSpreadsheet size={16} />
+            {isImporting
+              ? (lang === 'ar' ? 'جارٍ الاستيراد...' : 'Importation...')
+              : (lang === 'ar' ? 'استيراد DNA' : 'Importer DNA')}
+          </button>
+
+          {/* Download Template Button */}
+          <button
+            type="button"
+            onClick={downloadDnaTemplate}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '11px 18px',
+              fontSize: '14px',
+              fontWeight: 700,
+              background: 'white',
+              color: '#6366f1',
+              border: '2px solid #6366f1',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#6366f1'
+              e.currentTarget.style.color = 'white'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'white'
+              e.currentTarget.style.color = '#6366f1'
+            }}
+            title={lang === 'ar' ? 'تحميل نموذج Excel' : 'Télécharger le modèle Excel'}
+          >
+            <Download size={16} />
+            {lang === 'ar' ? 'نموذج Excel' : 'Modèle Excel'}
+          </button>
+
           {/* Vider le tableau Button */}
           {formateurs.length > 0 && (
             <button

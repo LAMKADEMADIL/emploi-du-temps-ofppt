@@ -139,6 +139,119 @@ export default function SalleGridPage(): React.ReactElement {
     return `${jour}__${salle}__${tsIdx}`
   }
 
+  function getFormateurName(rawF: string): string {
+    if (!rawF) return ''
+    const prof = formateurs.find(f => 
+      f.id === rawF ||
+      (f.nom_prenom || '').toUpperCase() === rawF.toUpperCase() ||
+      (f.nom || '').toUpperCase() === rawF.toUpperCase() ||
+      (f.nom_prenom || '').toUpperCase().includes(rawF.toUpperCase())
+    )
+    if (prof) {
+      return prof.prenom && prof.nom ? `${prof.nom} ${prof.prenom}` : (prof.nom_prenom || prof.nom || rawF)
+    }
+    return rawF
+  }
+
+  function getGroupeCode(rawG: string): string {
+    if (!rawG) return ''
+    const grp = groupes.find(g => 
+      g.id === rawG || 
+      g.code_groupe.toUpperCase().replace(/\s+/g, '') === rawG.toUpperCase().replace(/\s+/g, '')
+    )
+    return grp ? grp.code_groupe : rawG
+  }
+
+  // Vérifier si une cellule a un conflit (même groupe dans plusieurs salles ou même prof)
+  function getCellConflict(jour: string, salle: string, tsIdx: number): {
+    hasConflict: boolean
+    type: 'groupe' | 'formateur' | null
+    message: string
+  } {
+    const key = makeKey(jour, salle, tsIdx)
+    const currentCell = gridData[key]
+    if (!currentCell || (!currentCell.groupeId && !currentCell.formateurId)) {
+      return { hasConflict: false, type: null, message: '' }
+    }
+
+    const currentGrpCode = getGroupeCode(currentCell.groupeId)
+    const currentProfName = getFormateurName(currentCell.formateurId)
+
+    const conflictingRoomsGroupe: Array<{ salle: string; prof: string }> = []
+    const conflictingRoomsProf: string[] = []
+
+    Object.entries(gridData).forEach(([otherKey, otherCell]) => {
+      if (otherKey === key || !otherCell) return
+      const parts = otherKey.split('__')
+      if (parts.length === 3 && parts[0] === jour && parseInt(parts[2], 10) === tsIdx) {
+        const otherSalle = parts[1]
+
+        // 1. Conflit de groupe : même groupe dans une autre salle
+        if (currentGrpCode && currentGrpCode !== '-') {
+          const otherGrpCode = getGroupeCode(otherCell.groupeId)
+          if (otherGrpCode && otherGrpCode.toUpperCase().replace(/\s+/g, '') === currentGrpCode.toUpperCase().replace(/\s+/g, '')) {
+            conflictingRoomsGroupe.push({
+              salle: otherSalle,
+              prof: getFormateurName(otherCell.formateurId)
+            })
+          }
+        }
+
+        // 2. Conflit de formateur : même formateur dans une autre salle
+        if (currentCell.formateurId && otherCell.formateurId === currentCell.formateurId) {
+          conflictingRoomsProf.push(otherSalle)
+        }
+      }
+    })
+
+    if (conflictingRoomsGroupe.length > 0) {
+      const details = conflictingRoomsGroupe.map(c => `'${c.salle}' (avec ${c.prof || 'autre formateur'})`).join(', ')
+      return {
+        hasConflict: true,
+        type: 'groupe',
+        message: lang === 'ar'
+          ? `تعارض ! الفوج (${currentGrpCode}) مبرمج أيضاً في: ${details}`
+          : `Conflit ! Le groupe (${currentGrpCode}) est aussi assigné dans : ${details}`
+      }
+    }
+
+    if (conflictingRoomsProf.length > 0) {
+      return {
+        hasConflict: true,
+        type: 'formateur',
+        message: lang === 'ar'
+          ? `تعارض ! الأستاذ (${currentProfName}) مبرمج في قاعة أخرى: ${conflictingRoomsProf.join(', ')}`
+          : `Conflit ! Le formateur (${currentProfName}) est aussi dans : ${conflictingRoomsProf.join(', ')}`
+      }
+    }
+
+    return { hasConflict: false, type: null, message: '' }
+  }
+
+  // Vérifier pour le modal si un groupe est déjà dans une autre salle à ce créneau
+  function checkGroupeConflictForModal(rawG: string): { salle: string; prof: string; groupeCode: string } | null {
+    if (!selectedCell || !rawG || rawG === '-') return null
+    const targetGrpCode = getGroupeCode(rawG).toUpperCase().replace(/\s+/g, '')
+    if (!targetGrpCode) return null
+
+    for (const [otherKey, otherCell] of Object.entries(gridData)) {
+      if (otherKey === selectedCell.key || !otherCell) continue
+      const parts = otherKey.split('__')
+      if (parts.length === 3 && parts[0] === selectedCell.jour && parseInt(parts[2], 10) === selectedCell.timeslotIdx) {
+        const otherSalle = parts[1]
+        const otherGrpCode = getGroupeCode(otherCell.groupeId).toUpperCase().replace(/\s+/g, '')
+        if (otherGrpCode === targetGrpCode) {
+          return {
+            salle: otherSalle,
+            prof: getFormateurName(otherCell.formateurId) || (lang === 'ar' ? 'أستاذ آخر' : 'Autre formateur'),
+            groupeCode: getGroupeCode(rawG)
+          }
+        }
+      }
+    }
+    return null
+  }
+
   function openCell(jour: string, salle: string, tsIdx: number) {
     const key = makeKey(jour, salle, tsIdx)
     const existing = gridData[key]
@@ -162,6 +275,16 @@ export default function SalleGridPage(): React.ReactElement {
       })
       await planningSallesService.deleteCell(selectedCell.key)
     } else {
+      const conflict = checkGroupeConflictForModal(modalGroupe)
+      if (conflict) {
+        toast.error(
+          lang === 'ar'
+            ? `⚠️ تنبيه تعارض: الفوج (${conflict.groupeCode}) مبرمج بالفعل في '${conflict.salle}' مع ${conflict.prof} !`
+            : `⚠️ Conflit ! Le groupe (${conflict.groupeCode}) est déjà affecté dans la salle '${conflict.salle}' avec '${conflict.prof}' !`,
+          { duration: 7000 }
+        )
+      }
+
       const cellData: CellData = {
         formateurId: modalFormateur,
         groupeId: modalGroupe,
@@ -535,10 +658,7 @@ export default function SalleGridPage(): React.ReactElement {
 
                               const color = cell ? getProfColor(cell.formateurId) : null
 
-                              const profNameDisplay = prof?.prenom && prof?.nom
-                                ? `${prof.nom} ${prof.prenom}`
-                                : prof?.nom_prenom || cell?.formateurId || ''
-
+                              const profNameDisplay = cell ? getFormateurName(cell.formateurId) : ''
                               const groupeCodeDisplay = groupe?.code_groupe || cell?.groupeId || ''
 
                               const label = [
@@ -552,22 +672,26 @@ export default function SalleGridPage(): React.ReactElement {
                                 cell?.remarque ? `Remarque: ${cell.remarque}` : ''
                               ].filter(Boolean).join(' | ')
 
+                              const conflict = getCellConflict(jour, salle, tsIdx)
+                              const cellBg = conflict.hasConflict ? '#dc2626' : (color || '#ffffff')
+
                               return (
                                 <td
                                   key={tsIdx}
                                   onClick={() => openCell(jour, salle, tsIdx)}
-                                  title={tooltipTitle || undefined}
+                                  title={[conflict.hasConflict ? `⚠️ ${conflict.message}` : '', tooltipTitle].filter(Boolean).join(' | ') || undefined}
                                   style={{
-                                    border: '1px solid #94a3b8',
-                                    borderBottom: isLastRow ? '2px solid #475569' : '1px solid #94a3b8',
+                                    border: conflict.hasConflict ? '2px solid #b91c1c' : '1px solid #94a3b8',
+                                    borderBottom: isLastRow ? '2px solid #475569' : (conflict.hasConflict ? '2px solid #b91c1c' : '1px solid #94a3b8'),
                                     padding: 0,
                                     minWidth: 150,
                                     height: 38,
                                     cursor: 'pointer',
                                     transition: 'filter 0.15s',
-                                    background: color || '#ffffff',
+                                    background: cellBg,
                                     textAlign: 'center',
-                                    verticalAlign: 'middle'
+                                    verticalAlign: 'middle',
+                                    boxShadow: conflict.hasConflict ? 'inset 0 0 0 2px #fecaca' : 'none'
                                   }}
                                   onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.88)' }}
                                   onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
@@ -584,6 +708,7 @@ export default function SalleGridPage(): React.ReactElement {
                                       display: 'block',
                                       padding: '0 6px'
                                     }}>
+                                      {conflict.hasConflict && <span style={{ marginRight: 4 }}>⚠️</span>}
                                       {label}
                                     </span>
                                   )}
@@ -768,34 +893,60 @@ export default function SalleGridPage(): React.ReactElement {
                   {modalGroupe ? (
                     (() => {
                       const selectedGrp = groupes.find(g => g.id === modalGroupe)
+                      const selectedConflict = checkGroupeConflictForModal(modalGroupe)
                       return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <button
-                            type="button"
-                            onClick={() => setModalGroupe('')}
-                            title={lang === 'ar' ? 'إلغاء التحديد وعرض باقي الأفواج' : 'Désélectionner et afficher tous les groupes'}
-                            style={{
-                              padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 800, cursor: 'pointer',
-                              border: '2px solid #10b981',
-                              background: '#10b981',
-                              color: 'white',
-                              boxShadow: '0 2px 8px rgba(16,185,129,0.35)',
-                              display: 'inline-flex', alignItems: 'center', gap: 6,
-                              transition: 'all 0.15s'
-                            }}
-                          >
-                            <span>{selectedGrp ? selectedGrp.code_groupe : '—'}</span>
-                            <span style={{
-                              background: 'rgba(255,255,255,0.3)',
-                              borderRadius: '50%',
-                              width: 18, height: 18,
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 12, fontWeight: 900
-                            }}>✕</span>
-                          </button>
-                          <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
-                            {lang === 'ar' ? '(اضغط ✕ لتغيير الفوج)' : '(Cliquez ✕ pour changer)'}
-                          </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <button
+                              type="button"
+                              onClick={() => setModalGroupe('')}
+                              title={lang === 'ar' ? 'إلغاء التحديد وعرض باقي الأفواج' : 'Désélectionner et afficher tous les groupes'}
+                              style={{
+                                padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                                border: selectedConflict ? '2px solid #ef4444' : '2px solid #10b981',
+                                background: selectedConflict ? '#dc2626' : '#10b981',
+                                color: 'white',
+                                boxShadow: selectedConflict ? '0 2px 8px rgba(239,68,68,0.35)' : '0 2px 8px rgba(16,185,129,0.35)',
+                                display: 'inline-flex', alignItems: 'center', gap: 6,
+                                transition: 'all 0.15s'
+                              }}
+                            >
+                              {selectedConflict && <span>⚠️</span>}
+                              <span>{selectedGrp ? selectedGrp.code_groupe : '—'}</span>
+                              <span style={{
+                                background: 'rgba(255,255,255,0.3)',
+                                borderRadius: '50%',
+                                width: 18, height: 18,
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 12, fontWeight: 900
+                              }}>✕</span>
+                            </button>
+                            <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
+                              {lang === 'ar' ? '(اضغط ✕ لتغيير الفوج)' : '(Cliquez ✕ pour changer)'}
+                            </span>
+                          </div>
+
+                          {selectedConflict && (
+                            <div style={{
+                              padding: '8px 12px',
+                              background: '#fef2f2',
+                              border: '1.5px solid #ef4444',
+                              borderRadius: 8,
+                              color: '#b91c1c',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6
+                            }}>
+                              <span style={{ fontSize: 16 }}>⛔</span>
+                              <span>
+                                {lang === 'ar'
+                                  ? `تنبيه تعارض : الفوج (${selectedConflict.groupeCode}) مبرمج بالفعل في '${selectedConflict.salle}' مع ${selectedConflict.prof} في نفس التوقيت !`
+                                  : `Attention conflit : Le groupe (${selectedConflict.groupeCode}) est déjà dans la salle '${selectedConflict.salle}' avec '${selectedConflict.prof}' à ce créneau !`}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )
                     })()
@@ -814,22 +965,30 @@ export default function SalleGridPage(): React.ReactElement {
                       >
                         —
                       </button>
-                      {filteredGroupes.map(g => (
-                        <button
-                          key={g.id}
-                          type="button"
-                          onClick={() => setModalGroupe(g.id || '')}
-                          style={{
-                            padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                            border: '1.5px solid #10b981',
-                            background: '#f0fdf4',
-                            color: '#065f46',
-                            transition: 'all 0.15s'
-                          }}
-                        >
-                          {g.code_groupe}
-                        </button>
-                      ))}
+                      {filteredGroupes.map(g => {
+                        const gConflict = checkGroupeConflictForModal(g.id || g.code_groupe)
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => setModalGroupe(g.id || '')}
+                            style={{
+                              padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                              border: gConflict ? '1.5px solid #ef4444' : '1.5px solid #10b981',
+                              background: gConflict ? '#fef2f2' : '#f0fdf4',
+                              color: gConflict ? '#dc2626' : '#065f46',
+                              transition: 'all 0.15s',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}
+                            title={gConflict ? `⚠️ Déjà dans '${gConflict.salle}' avec ${gConflict.prof}` : undefined}
+                          >
+                            {gConflict && <span>⚠️</span>}
+                            <span>{g.code_groupe}</span>
+                          </button>
+                        )
+                      })}
                     </>
                   )}
                 </div>

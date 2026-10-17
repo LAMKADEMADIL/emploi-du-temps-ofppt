@@ -563,31 +563,16 @@ export default function DnPage(): React.ReactElement {
                   {/* 1. Day Filières (Regular Classes) */}
                   {dayRows.map((row) => (
                     <tr key={row.rowKey}>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                        <input
-                          type="text"
-                          value={codeValues[row.rowKey] ?? row.defaultCode}
-                          onChange={(e) => setCodeValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                          style={inputStyle}
-                        />
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '7px 6px', color: '#000', fontWeight: 700, fontSize: '15px', background: '#ffffff', userSelect: 'none' }}>
+                        {row.defaultCode}
                       </td>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                        <input
-                          type="text"
-                          value={codeValues[`${row.rowKey}-name`] ?? row.defaultName}
-                          onChange={(e) => setCodeValues(prev => ({ ...prev, [`${row.rowKey}-name`]: e.target.value }))}
-                          style={inputStyle}
-                        />
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '7px 6px', color: '#000', fontWeight: 700, fontSize: '15px', background: '#ffffff', userSelect: 'none' }}>
+                        {row.defaultName}
                       </td>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                        <input
-                          type="text"
-                          value={nbrValues[row.rowKey] ?? String(row.defaultNbr)}
-                          onChange={(e) => setNbrValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                          style={inputStyle}
-                        />
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '7px 6px', color: '#000', fontWeight: 700, fontSize: '15px', background: '#ffffff', userSelect: 'none' }}>
+                        {row.defaultNbr}
                       </td>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#1d4ed8', fontSize: '15px' }}>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#1d4ed8', fontSize: '15px', background: '#ffffff' }}>
                         <input
                           type="text"
                           value={synValues[row.rowKey] ?? ''}
@@ -596,7 +581,7 @@ export default function DnPage(): React.ReactElement {
                           style={{ ...inputStyle, color: '#1d4ed8' }}
                         />
                       </td>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px', background: '#ffffff' }}>
                         <input
                           type="text"
                           value={printValues[row.rowKey] ?? row.defaultPrint}
@@ -605,7 +590,7 @@ export default function DnPage(): React.ReactElement {
                         />
                       </td>
                       {extraCols.map(col => (
-                        <td key={col.id} style={{ textAlign: 'center', borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px' }}>
+                        <td key={col.id} style={{ textAlign: 'center', borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', background: '#ffffff' }}>
                           <input
                             type="text"
                             value={extraColValues[col.id]?.[row.rowKey] ?? ''}
@@ -618,34 +603,19 @@ export default function DnPage(): React.ReactElement {
                     </tr>
                   ))}
 
-                  {/* 2. Cours du Soir (CDS) Rows at Bottom (TEMI300CDS, TEMI100CDS, RVA100CDS...) with identical normal style */}
+                  {/* 2. Cours du Soir (CDS) Rows at Bottom (TEMI300CDS, TEMI100CDS, RVA100CDS...) */}
                   {cdsRows.map((row) => (
                     <tr key={row.rowKey}>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                        <input
-                          type="text"
-                          value={codeValues[row.rowKey] ?? row.defaultCode}
-                          onChange={(e) => setCodeValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                          style={inputStyle}
-                        />
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '7px 6px', color: '#000', fontWeight: 700, fontSize: '15px', background: '#ffffff', userSelect: 'none' }}>
+                        {row.defaultCode}
                       </td>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                        <input
-                          type="text"
-                          value={codeValues[`${row.rowKey}-name`] ?? row.defaultName}
-                          onChange={(e) => setCodeValues(prev => ({ ...prev, [`${row.rowKey}-name`]: e.target.value }))}
-                          style={inputStyle}
-                        />
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '7px 6px', color: '#000', fontWeight: 700, fontSize: '15px', background: '#ffffff', userSelect: 'none' }}>
+                        {row.defaultName}
                       </td>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                        <input
-                          type="text"
-                          value={nbrValues[row.rowKey] ?? String(row.defaultNbr)}
-                          onChange={(e) => setNbrValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                          style={inputStyle}
-                        />
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '7px 6px', color: '#000', fontWeight: 700, fontSize: '15px', background: '#ffffff', userSelect: 'none' }}>
+                        {row.defaultNbr}
                       </td>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#1d4ed8', fontSize: '15px' }}>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#1d4ed8', fontSize: '15px', background: '#ffffff' }}>
                         <input
                           type="text"
                           value={synValues[row.rowKey] ?? ''}
@@ -654,7 +624,7 @@ export default function DnPage(): React.ReactElement {
                           style={{ ...inputStyle, color: '#1d4ed8' }}
                         />
                       </td>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#dc2626', fontWeight: 800, fontSize: '15px' }}>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#dc2626', fontWeight: 800, fontSize: '15px', background: '#ffffff' }}>
                         <input
                           type="text"
                           value={printValues[row.rowKey] ?? row.defaultPrint}
@@ -663,7 +633,7 @@ export default function DnPage(): React.ReactElement {
                         />
                       </td>
                       {extraCols.map(col => (
-                        <td key={col.id} style={{ textAlign: 'center', borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px' }}>
+                        <td key={col.id} style={{ textAlign: 'center', borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', background: '#ffffff' }}>
                           <input
                             type="text"
                             value={extraColValues[col.id]?.[row.rowKey] ?? ''}

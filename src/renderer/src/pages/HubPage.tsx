@@ -99,6 +99,12 @@ interface FormateurSlot {
     occupant: string
     message: string
   }
+  conflitGroupe?: {
+    groupe: string
+    formateur: string
+    salle?: string
+    message: string
+  }
 }
 
 // ── Helpers: Calcul automatique des dates depuis l'horloge du PC ─────────────
@@ -148,9 +154,11 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   const [activeCellKey, setActiveCellKey] = useState<string | null>(null)
   const [cellEditModal, setCellEditModal] = useState<{ day: string; slotIdx: number } | null>(null)
 
-  // ── Conflit de Salle Modal (style Excel / OFPPT officiel) ───────────────
+  // ── Conflit Modal (Salle ou Groupe - style Excel / OFPPT officiel) ──────────
   const [conflitModal, setConflitModal] = useState<{
-    salle: string
+    type?: 'salle' | 'groupe'
+    salle?: string
+    groupe?: string
     occupant: string
     day: string
     timeLabel: string
@@ -587,6 +595,20 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     return false
   }
 
+  function getOccupantProfName(rawF: string): string {
+    if (!rawF) return 'Autre formateur'
+    const fObj = formateurs.find(f => 
+      f.id === rawF ||
+      (f.nom_prenom || '').toUpperCase() === rawF.toUpperCase() ||
+      (f.nom || '').toUpperCase() === rawF.toUpperCase() ||
+      (f.nom_prenom || '').toUpperCase().includes(rawF.toUpperCase())
+    )
+    if (fObj) {
+      return (fObj.nom && fObj.prenom ? `${fObj.nom} ${fObj.prenom}` : (fObj.nom_prenom || fObj.nom || rawF)).toUpperCase()
+    }
+    return rawF.toUpperCase()
+  }
+
   function isSalleOccupiedByOther(day: string, slotIdx: number, salleName: string): boolean {
     if (!salleName || !salleName.trim() || !selectedProfName) return false
     const planningKey = `${day.toUpperCase()}__${salleName.trim().toUpperCase()}__${slotIdx}`
@@ -600,6 +622,83 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     const planningKey = `${day.toUpperCase()}__${salleName.trim().toUpperCase()}__${slotIdx}`
     const cell = planningSallesMap[planningKey]
     return cell ? getOccupantLabel(cell) : ''
+  }
+
+  // ── Helper: Vérifier si un groupe est déjà occupé à ce créneau avec un autre formateur ──
+  function isGroupeOccupiedByOther(
+    day: string,
+    slotIdx: number,
+    groupeCode: string,
+    planningMapSource?: Record<string, any>
+  ): { formateur: string; salle: string } | null {
+    if (!groupeCode || !groupeCode.trim() || groupeCode === '-' || !selectedProfName) return null
+    const dayUpper = day.toUpperCase()
+    const cleanG = groupeCode.trim().toUpperCase().replace(/\s+/g, '')
+    const pMap = planningMapSource || planningSallesMap
+
+    // 1. Vérifier dans planning_salles (Firebase / état actif)
+    for (const [pk, pCell] of Object.entries(pMap)) {
+      const parts = pk.split('__')
+      if (parts.length === 3) {
+        const pDay = parts[0]
+        const pSalle = parts[1]
+        const pIdx = parseInt(parts[2], 10)
+
+        if (pDay === dayUpper && pIdx === slotIdx && pCell) {
+          const cellGrpRaw = String(pCell.groupeId || '').trim().toUpperCase()
+          const matchedGrp = groupes.find(g => 
+            g.id === pCell.groupeId || 
+            g.code_groupe.toUpperCase().replace(/\s+/g, '') === cellGrpRaw.replace(/\s+/g, '')
+          )
+          const cellGrpCode = (matchedGrp ? matchedGrp.code_groupe : cellGrpRaw).toUpperCase().replace(/\s+/g, '')
+
+          if (cellGrpCode === cleanG) {
+            if (!isSameFormateur(pCell.formateurId, selectedProfName)) {
+              return {
+                formateur: getOccupantProfName(pCell.formateurId),
+                salle: pSalle
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Vérifier aussi dans le cache localStorage des autres formateurs (edt_prof_*)
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const lKey = localStorage.key(i)
+        if (lKey && lKey.startsWith('edt_prof_')) {
+          const otherProfName = lKey.replace('edt_prof_', '').replace(/_/g, ' ')
+          if (!isSameFormateur(otherProfName, selectedProfName)) {
+            const rawVal = localStorage.getItem(lKey)
+            if (rawVal) {
+              const otherSchedule: ScheduleMap = JSON.parse(rawVal)
+              const otherSlot = otherSchedule[`${day}_${slotIdx}`]
+              if (otherSlot && otherSlot.groupe) {
+                const otherCleanG = otherSlot.groupe.trim().toUpperCase().replace(/\s+/g, '')
+                if (otherCleanG === cleanG) {
+                  return {
+                    formateur: otherProfName,
+                    salle: otherSlot.salle || 'Non définie'
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return null
+  }
+
+  function getGroupeOccupantLabelFor(day: string, slotIdx: number, groupeCode: string): string {
+    const occ = isGroupeOccupiedByOther(day, slotIdx, groupeCode)
+    if (!occ) return ''
+    return `${occ.formateur} (${lang === 'ar' ? 'القاعة' : 'Salle'}: ${occ.salle})`
   }
 
   // Load schedule for a formateur (from localStorage or firebase planning)
@@ -642,17 +741,21 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       }
     }
 
-    // Check conflicts for existing slots
+    // Check room and groupe conflicts for existing slots
     for (const [key, slot] of Object.entries(loadedSchedule)) {
-      if (slot && slot.salle && slot.salle.trim()) {
-        const [day, slotIdxStr] = key.split('_')
-        const slotIdx = parseInt(slotIdxStr, 10)
-        const planningKey = `${day.toUpperCase()}__${slot.salle.trim().toUpperCase()}__${slotIdx}`
+      if (!slot) continue
+      const [day, slotIdxStr] = key.split('_')
+      const slotIdx = parseInt(slotIdxStr, 10)
+      const dayUpper = day.toUpperCase()
+      const timeLabel = TIMESLOTS[slotIdx] ? TIMESLOTS[slotIdx].label : ''
+
+      // 1. Vérifier conflit de salle
+      if (slot.salle && slot.salle.trim()) {
+        const planningKey = `${dayUpper}__${slot.salle.trim().toUpperCase()}__${slotIdx}`
         const cell = planningMap[planningKey]
 
         if (cell && !isSameFormateur(cell.formateurId, profName)) {
           const occLabel = getOccupantLabel(cell)
-          const timeLabel = TIMESLOTS[slotIdx] ? TIMESLOTS[slotIdx].label : ''
           slot.conflit = {
             salle: slot.salle,
             occupant: occLabel,
@@ -663,6 +766,28 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
         } else {
           delete slot.conflit
         }
+      } else {
+        delete slot.conflit
+      }
+
+      // 2. Vérifier conflit de groupe (est-ce que ce groupe étudie déjà avec un autre formateur à ce créneau ?)
+      const cleanG = (slot.groupe || '').trim().toUpperCase()
+      if (cleanG && cleanG !== '-') {
+        const grpConflict = isGroupeOccupiedByOther(day, slotIdx, cleanG, planningMap)
+        if (grpConflict) {
+          slot.conflitGroupe = {
+            groupe: slot.groupe,
+            formateur: grpConflict.formateur,
+            salle: grpConflict.salle,
+            message: lang === 'ar'
+              ? `تعارض ! الفوج '${slot.groupe}' يدرس بالفعل مع '${grpConflict.formateur}' (القاعة: ${grpConflict.salle}) يوم ${day} توقيت ${timeLabel}.`
+              : `Conflit ! Le groupe '${slot.groupe}' a déjà cours avec '${grpConflict.formateur}' (Salle: ${grpConflict.salle}) le ${day} à ${timeLabel} .`
+          }
+        } else {
+          delete slot.conflitGroupe
+        }
+      } else {
+        delete slot.conflitGroupe
       }
     }
 
@@ -688,13 +813,13 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     setCellEditModal({ day, slotIdx })
   }
 
-  // Apply cell edit with room conflict check
+  // Apply cell edit with room & groupe conflict checks
   async function handleSaveCell() {
     if (!cellEditModal) return
     const key = `${cellEditModal.day}_${cellEditModal.slotIdx}`
     const existing = profSchedule[key] || { syncedSalle: true, syncedGroupe: true }
 
-    // ── Vérifier si le groupe sélectionné est en stage
+    // ── 1. Vérifier si le groupe sélectionné est en stage
     if (editGroupe && editGroupe.trim() && editGroupe !== '-') {
       const cleanG = editGroupe.trim().toUpperCase()
       const targetGrp = groupes.find(g => g.code_groupe.toUpperCase().trim() === cleanG)
@@ -722,8 +847,25 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       // fallback to existing
     }
 
-    let detectedConflict: { salle: string; occupant: string; message: string } | null = null
+    // ── 2. Vérifier Conflit de Groupe (est-ce que ce groupe est déjà occupé avec un autre formateur ?)
+    let detectedGroupeConflict: { groupe: string; formateur: string; salle: string; message: string } | null = null
+    if (editGroupe && editGroupe.trim() && editGroupe !== '-' && selectedProfName) {
+      const grpConflict = isGroupeOccupiedByOther(cellEditModal.day, cellEditModal.slotIdx, editGroupe, currentPlanning)
+      if (grpConflict) {
+        const conflictMsg = lang === 'ar'
+          ? `تعارض ! الفوج '${editGroupe}' يدرس بالفعل مع الأستاذ '${grpConflict.formateur}' (القاعة: ${grpConflict.salle}) يوم ${cellEditModal.day} توقيت ${timeLabel}.`
+          : `Conflit ! Le groupe '${editGroupe}' a déjà cours avec le formateur '${grpConflict.formateur}' (Salle: ${grpConflict.salle}) le ${cellEditModal.day} à ${timeLabel} .`
+        detectedGroupeConflict = {
+          groupe: editGroupe,
+          formateur: grpConflict.formateur,
+          salle: grpConflict.salle,
+          message: conflictMsg
+        }
+      }
+    }
 
+    // ── 3. Vérifier Conflit de Salle
+    let detectedConflict: { salle: string; occupant: string; message: string } | null = null
     if (salleUpper && selectedProfName) {
       const planningKey = `${dayUpper}__${salleUpper}__${cellEditModal.slotIdx}`
       const existingPlanningCell = currentPlanning[planningKey]
@@ -749,15 +891,28 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
         groupe: editGroupe,
         module: editModule,
         salle: editSalle,
-        conflit: detectedConflict || undefined
+        conflit: detectedConflict || undefined,
+        conflitGroupe: detectedGroupeConflict || undefined
       }
     }
     saveSchedule(updated)
     setCellEditModal(null)
 
-    if (detectedConflict) {
-      // Show conflict popup modal matching Excel
+    if (detectedGroupeConflict) {
+      // Show Groupe conflict popup modal matching Excel
       setConflitModal({
+        type: 'groupe',
+        groupe: detectedGroupeConflict.groupe,
+        occupant: detectedGroupeConflict.formateur,
+        day: cellEditModal.day,
+        timeLabel,
+        message: detectedGroupeConflict.message
+      })
+      toast.error(detectedGroupeConflict.message, { duration: 7000 })
+    } else if (detectedConflict) {
+      // Show Salle conflict popup modal matching Excel
+      setConflitModal({
+        type: 'salle',
         salle: detectedConflict.salle,
         occupant: detectedConflict.occupant,
         day: cellEditModal.day,
@@ -768,7 +923,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     } else {
       toast.success(lang === 'ar' ? '✅ تم حفظ الحصة بنجاح !' : 'Séance enregistrée !')
 
-      // Automatically sync to planningSalles ONLY if no conflict
+      // Automatically sync to planningSalles ONLY if no conflict whatsoever
       if (editSalle && selectedProfName) {
         try {
           const planningKey = `${dayUpper}__${salleUpper}__${cellEditModal.slotIdx}`
@@ -1579,6 +1734,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                           const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
                             ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
                             : false
+                          const hasGroupeConflict = !isSlotGroupInStage && !!slot?.conflitGroupe
 
                           return (
                             <td
@@ -1588,19 +1744,37 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                 borderRight: slotIdx < 3 ? '1.5px solid #000' : 'none',
                                 borderBottom: '1px solid #cbd5e1',
                                 padding: '6px 4px',
-                                fontWeight: 800,
+                                fontWeight: hasGroupeConflict ? 900 : 800,
                                 fontSize: isSlotGroupInStage ? 12 : 14,
                                 fontStyle: isSlotGroupInStage ? 'italic' : 'normal',
-                                color: isSlotGroupInStage ? '#64748b' : (slot?.groupe ? '#0f172a' : '#94a3b8'),
+                                color: isSlotGroupInStage ? '#64748b' : (hasGroupeConflict ? '#ffffff' : (slot?.groupe ? '#0f172a' : '#94a3b8')),
                                 cursor: 'pointer',
-                                background: isSlotGroupInStage ? '#f1f5f9' : (slot?.groupe ? '#f8fafc' : '#ffffff'),
-                                transition: 'background 0.15s'
+                                background: isSlotGroupInStage ? '#f1f5f9' : (hasGroupeConflict ? '#dc2626' : (slot?.groupe ? '#f8fafc' : '#ffffff')),
+                                transition: 'background 0.15s',
+                                textAlign: 'center'
                               }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0' }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = isSlotGroupInStage ? '#f1f5f9' : (slot?.groupe ? '#f8fafc' : '#ffffff') }}
-                              title={isSlotGroupInStage ? `Le groupe ${slot?.groupe} est en stage en entreprise (hors établissement)` : "Cliquer pour modifier cette séance"}
+                              onMouseEnter={(e) => {
+                                if (!hasGroupeConflict) e.currentTarget.style.background = '#e2e8f0'
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!hasGroupeConflict) e.currentTarget.style.background = isSlotGroupInStage ? '#f1f5f9' : (slot?.groupe ? '#f8fafc' : '#ffffff')
+                              }}
+                              title={
+                                isSlotGroupInStage
+                                  ? `Le groupe ${slot?.groupe} est en stage en entreprise (hors établissement)`
+                                  : (hasGroupeConflict ? slot?.conflitGroupe?.message : "Cliquer pour modifier cette séance")
+                              }
                             >
-                              {isSlotGroupInStage ? 'Stage' : (slot?.groupe || '-')}
+                              {isSlotGroupInStage ? (
+                                'Stage'
+                              ) : hasGroupeConflict ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                  <span>⚠️</span>
+                                  <span>{slot?.groupe}</span>
+                                </span>
+                              ) : (
+                                slot?.groupe || '-'
+                              )}
                             </td>
                           )
                         })}
@@ -1735,6 +1909,12 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                     onChange={(e) => setEditGroupe(e.target.value.toUpperCase())}
                     list="formateur-groupes-list"
                     autoFocus
+                    style={editGroupe && isGroupeOccupiedByOther(cellEditModal.day, cellEditModal.slotIdx, editGroupe) ? {
+                      borderColor: '#dc2626',
+                      background: '#fef2f2',
+                      color: '#991b1b',
+                      fontWeight: 700
+                    } : {}}
                   />
                   <datalist id="formateur-groupes-list">
                     {groupes.filter(g => !g.en_stage).map(g => (
@@ -1745,6 +1925,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                       {formateurAssignedGroups.map(grpCode => {
                         const isSelected = editGroupe === grpCode
+                        const isGrpOccupied = !!isGroupeOccupiedByOther(cellEditModal.day, cellEditModal.slotIdx, grpCode)
                         return (
                           <button
                             key={grpCode}
@@ -1754,19 +1935,46 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                               padding: '4px 10px',
                               fontSize: 12,
                               fontWeight: 700,
-                              background: isSelected ? '#2563eb' : '#f1f5f9',
-                              color: isSelected ? '#ffffff' : '#0f172a',
-                              border: isSelected ? '1.5px solid #1d4ed8' : '1px solid #cbd5e1',
+                              background: isGrpOccupied ? '#fef2f2' : (isSelected ? '#2563eb' : '#f1f5f9'),
+                              color: isGrpOccupied ? '#dc2626' : (isSelected ? '#ffffff' : '#0f172a'),
+                              border: isGrpOccupied ? '1.5px solid #ef4444' : (isSelected ? '1.5px solid #1d4ed8' : '1px solid #cbd5e1'),
                               borderRadius: 6,
                               cursor: 'pointer',
                               transition: 'all 0.15s',
-                              boxShadow: isSelected ? '0 2px 4px rgba(37,99,235,0.3)' : 'none'
+                              boxShadow: isSelected ? '0 2px 4px rgba(37,99,235,0.3)' : 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4
                             }}
+                            title={isGrpOccupied ? `⚠️ Déjà occupé : ${getGroupeOccupantLabelFor(cellEditModal.day, cellEditModal.slotIdx, grpCode)}` : ''}
                           >
-                            {grpCode}
+                            {isGrpOccupied && <span>⚠️</span>}
+                            <span>{grpCode}</span>
                           </button>
                         )
                       })}
+                    </div>
+                  )}
+                  {editGroupe && isGroupeOccupiedByOther(cellEditModal.day, cellEditModal.slotIdx, editGroupe) && (
+                    <div style={{
+                      marginTop: 8,
+                      padding: '8px 12px',
+                      background: '#fef2f2',
+                      border: '1.5px solid #ef4444',
+                      borderRadius: 8,
+                      fontSize: 12,
+                      color: '#b91c1c',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}>
+                      <span style={{ fontSize: 16 }}>⛔</span>
+                      <span>
+                        {lang === 'ar'
+                          ? `تنبيه تعارض : الفوج (${editGroupe}) يدرس بالفعل مع ${getGroupeOccupantLabelFor(cellEditModal.day, cellEditModal.slotIdx, editGroupe)} في هذا التوقيت!`
+                          : `Attention conflit : Le groupe (${editGroupe}) a déjà cours avec ${getGroupeOccupantLabelFor(cellEditModal.day, cellEditModal.slotIdx, editGroupe)} à ce créneau !`}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -2026,10 +2234,14 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   </div>
                   <div>
                     <h3 style={{ fontSize: 18, fontWeight: 900, color: '#991b1b', margin: 0, lineHeight: 1.3 }}>
-                      {lang === 'ar' ? 'تعارض في القاعة' : 'Conflit de salle'}
+                      {conflitModal.type === 'groupe'
+                        ? (lang === 'ar' ? 'تعارض في الفوج (المجموعة)' : 'Conflit d\'assignation de groupe')
+                        : (lang === 'ar' ? 'تعارض في القاعة' : 'Conflit de salle')}
                     </h3>
                     <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 3 }}>
-                      {lang === 'ar' ? 'تنبيه انشغال القاعة في Planning des Salles' : 'Alerte d\'occupation Planning des Salles'}
+                      {conflitModal.type === 'groupe'
+                        ? (lang === 'ar' ? 'تنبيه: هذا الفوج يدرس بالفعل مع أستاذ آخر في نفس التوقيت' : 'Alerte : ce groupe a déjà cours avec un autre formateur à ce créneau')
+                        : (lang === 'ar' ? 'تنبيه انشغال القاعة في Planning des Salles' : 'Alerte d\'occupation Planning des Salles')}
                     </div>
                   </div>
                 </div>
@@ -2078,9 +2290,13 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                 margin: '0 0 22px',
                 direction: lang === 'ar' ? 'rtl' : 'ltr'
               }}>
-                {lang === 'ar'
-                  ? 'تم تلوين هذه القاعة في الجدول باللون الأحمر لتنبيهك. يمكنك النقر عليها لتغيير القاعة أو تعديل الحصة.'
-                  : 'Cette salle a été marquée en rouge dans le tableau. Vous pouvez cliquer dessus à tout moment pour la modifier.'}
+                {conflitModal.type === 'groupe'
+                  ? (lang === 'ar'
+                      ? 'تم تلوين هذا الفوج في الجدول باللون الأحمر لتنبيهك. لا يمكن لنفس الفوج أن يدرس مع أستاذين في نفس التوقيت لتفادي التضارب.'
+                      : 'Ce groupe a été marqué en rouge dans le tableau. Un même groupe ne peut pas étudier avec deux formateurs simultanément.')
+                  : (lang === 'ar'
+                      ? 'تم تلوين هذه القاعة في الجدول باللون الأحمر لتنبيهك. يمكنك النقر عليها لتغيير القاعة أو تعديل الحصة.'
+                      : 'Cette salle a été marquée en rouge dans le tableau. Vous pouvez cliquer dessus à tout moment pour la modifier.')}
               </p>
 
               {/* Actions */}
