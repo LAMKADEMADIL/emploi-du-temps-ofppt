@@ -102,6 +102,16 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   const [activeCellKey, setActiveCellKey] = useState<string | null>(null)
   const [cellEditModal, setCellEditModal] = useState<{ day: string; slotIdx: number } | null>(null)
 
+  // ── Confirmation Modal (centre de l'écran) ─────────────────────────────
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string
+    message: string
+    icon: string
+    confirmLabel: string
+    confirmColor: string
+    onConfirm: () => void
+  } | null>(null)
+
   // Selection - Section Timetable
   const [selectedSection, setSelectedSection] = useState<{
     filiereCode: string
@@ -625,74 +635,19 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       )
       return
     }
-
-    toast(
-      (t) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 290, maxWidth: 390 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <span style={{ fontSize: 22 }}>⚠️</span>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>
-                {lang === 'ar' ? 'تأكيد مزامنة القاعات' : 'Confirmer la synchronisation'}
-              </div>
-              <div style={{ fontSize: 12, color: '#475569', marginTop: 3, lineHeight: 1.45 }}>
-                {lang === 'ar'
-                  ? `هل تريد تأكيد مزامنة وحفظ ${count} حصة للأستاذ (${selectedProfName}) في جدول القاعات ؟`
-                  : `Voulez-vous synchroniser et enregistrer les ${count} séance(s) de ${selectedProfName} avec le Planning des Salles ?`}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <button
-              type="button"
-              onClick={() => toast.dismiss(t.id)}
-              style={{
-                padding: '5px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                background: '#f1f5f9',
-                color: '#475569',
-                border: '1px solid #cbd5e1',
-                borderRadius: 6,
-                cursor: 'pointer'
-              }}
-            >
-              {lang === 'ar' ? 'إلغاء' : 'Annuler'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                toast.dismiss(t.id)
-                executeSynchroniserSalle()
-              }}
-              style={{
-                padding: '5px 14px',
-                fontSize: 12,
-                fontWeight: 700,
-                background: '#2563eb',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: 6,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                boxShadow: '0 2px 4px rgba(37,99,235,0.3)'
-              }}
-            >
-              <span>{lang === 'ar' ? 'تأكيد وحفظ' : 'Confirmer & Enregistrer'}</span>
-            </button>
-          </div>
-        </div>
-      ),
-      {
-        id: 'confirm-sync-salle',
-        duration: 20000
-      }
-    )
+    setConfirmModal({
+      title: lang === 'ar' ? 'تأكيد مزامنة القاعات' : 'Confirmer la synchronisation',
+      message: lang === 'ar'
+        ? `هل تريد تأكيد مزامنة وحفظ ${count} حصة للأستاذ "${selectedProfName}" في جدول القاعات ؟`
+        : `Voulez-vous synchroniser et enregistrer les ${count} séance(s) du formateur « ${selectedProfName} » avec le Planning des Salles ?`,
+      icon: '🔄',
+      confirmLabel: lang === 'ar' ? 'تأكيد وحفظ' : 'Confirmer & Enregistrer',
+      confirmColor: '#2563eb',
+      onConfirm: executeSynchroniserSalle
+    })
   }
 
-  // ── Dé-synchroniser Salle (avec confirmation) ───────────────────────────
+  // ── Dé-synchroniser Salle (avec confirmation modale) ────────────────────
   async function executeDesynchroniserSalle() {
     if (!selectedProfName) return
     const toastId = toast.loading(lang === 'ar' ? 'جاري تحرير القاعات...' : 'Libération des salles...')
@@ -731,84 +686,26 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       )
       return
     }
-
-    toast(
-      (t) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 290, maxWidth: 390 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <span style={{ fontSize: 22 }}>🗑️</span>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>
-                {lang === 'ar' ? 'تأكيد إلغاء المزامنة' : 'Confirmer la dé-synchronisation'}
-              </div>
-              <div style={{ fontSize: 12, color: '#475569', marginTop: 3, lineHeight: 1.45 }}>
-                {lang === 'ar'
-                  ? `هل تريد تأكيد تحرير ${count} قاعة للأستاذ (${selectedProfName}) من جدول القاعات ؟`
-                  : `Voulez-vous libérer et dé-synchroniser les ${count} salle(s) de ${selectedProfName} du Planning ?`}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <button
-              type="button"
-              onClick={() => toast.dismiss(t.id)}
-              style={{
-                padding: '5px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                background: '#f1f5f9',
-                color: '#475569',
-                border: '1px solid #cbd5e1',
-                borderRadius: 6,
-                cursor: 'pointer'
-              }}
-            >
-              {lang === 'ar' ? 'إلغاء' : 'Annuler'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                toast.dismiss(t.id)
-                executeDesynchroniserSalle()
-              }}
-              style={{
-                padding: '5px 14px',
-                fontSize: 12,
-                fontWeight: 700,
-                background: '#dc2626',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: 6,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                boxShadow: '0 2px 4px rgba(220,38,38,0.3)'
-              }}
-            >
-              <span>{lang === 'ar' ? 'تأكيد التحرير' : 'Confirmer la libération'}</span>
-            </button>
-          </div>
-        </div>
-      ),
-      {
-        id: 'confirm-desync-salle',
-        duration: 20000
-      }
-    )
+    setConfirmModal({
+      title: lang === 'ar' ? 'تأكيد إلغاء المزامنة' : 'Confirmer la dé-synchronisation',
+      message: lang === 'ar'
+        ? `هل تريد تأكيد تحرير ${count} قاعة للأستاذ "${selectedProfName}" من جدول القاعات ؟`
+        : `Voulez-vous libérer et dé-synchroniser les ${count} salle(s) de « ${selectedProfName} » du Planning ?`,
+      icon: '🗑️',
+      confirmLabel: lang === 'ar' ? 'تأكيد التحرير' : 'Confirmer la libération',
+      confirmColor: '#dc2626',
+      onConfirm: executeDesynchroniserSalle
+    })
   }
 
-  // ── Vider cellule groupe (avec confirmation) ───────────────────────────
+  // ── Vider cellule groupe (avec confirmation modale) ──────────────────────
   function executeViderCelluleGroupe() {
     if (!selectedProfName) return
     const updated: ScheduleMap = {}
     let count = 0
     for (const [key, slot] of Object.entries(profSchedule)) {
       if (slot.groupe && slot.groupe !== '-') count++
-      updated[key] = {
-        ...slot,
-        groupe: ''
-      }
+      updated[key] = { ...slot, groupe: '' }
     }
     saveSchedule(updated)
     toast.success(
@@ -829,68 +726,16 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       )
       return
     }
-
-    toast(
-      (t) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 290, maxWidth: 390 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <span style={{ fontSize: 22 }}>⚠️</span>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>
-                {lang === 'ar' ? 'تأكيد إخلاء المجموعات' : 'Confirmer l\'effacement des groupes'}
-              </div>
-              <div style={{ fontSize: 12, color: '#475569', marginTop: 3, lineHeight: 1.45 }}>
-                {lang === 'ar'
-                  ? `هل تريد مسح وإخلاء ${count} فوج من جدول الأستاذ (${selectedProfName}) ؟`
-                  : `Voulez-vous vider les ${count} groupe(s) de cet emploi du temps ?`}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <button
-              type="button"
-              onClick={() => toast.dismiss(t.id)}
-              style={{
-                padding: '5px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                background: '#f1f5f9',
-                color: '#475569',
-                border: '1px solid #cbd5e1',
-                borderRadius: 6,
-                cursor: 'pointer'
-              }}
-            >
-              {lang === 'ar' ? 'إلغاء' : 'Annuler'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                toast.dismiss(t.id)
-                executeViderCelluleGroupe()
-              }}
-              style={{
-                padding: '5px 14px',
-                fontSize: 12,
-                fontWeight: 700,
-                background: '#dc2626',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: 6,
-                cursor: 'pointer',
-                boxShadow: '0 2px 4px rgba(220,38,38,0.3)'
-              }}
-            >
-              <span>{lang === 'ar' ? 'تأكيد الإخلاء' : 'Confirmer l\'effacement'}</span>
-            </button>
-          </div>
-        </div>
-      ),
-      {
-        id: 'confirm-vider-groupe',
-        duration: 20000
-      }
-    )
+    setConfirmModal({
+      title: lang === 'ar' ? 'تأكيد إخلاء المجموعات' : 'Confirmer l\'effacement des groupes',
+      message: lang === 'ar'
+        ? `هل تريد مسح وإخلاء ${count} فوج من جدول الأستاذ "${selectedProfName}" ؟`
+        : `Voulez-vous vider les ${count} groupe(s) de l'emploi du temps de « ${selectedProfName} » ?`,
+      icon: '⚠️',
+      confirmLabel: lang === 'ar' ? 'تأكيد الإخلاء' : 'Confirmer l\'effacement',
+      confirmColor: '#dc2626',
+      onConfirm: executeViderCelluleGroupe
+    })
   }
 
   // Navigation handlers -> Route to Planning Salles view (occupation / salles_vides / groupes_vides)
@@ -1812,6 +1657,131 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                     Enregistrer
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Confirmation Modal centré ─────────────────────────────────────── */}
+        {confirmModal && (
+          <div
+            onClick={() => setConfirmModal(null)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(15, 23, 42, 0.55)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              animation: 'fadeIn 0.15s ease'
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: '#ffffff',
+                borderRadius: 16,
+                boxShadow: '0 20px 60px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.12)',
+                width: 420,
+                maxWidth: '90vw',
+                padding: '32px 32px 28px',
+                border: '1px solid #e2e8f0',
+                animation: 'slideUp 0.2s ease'
+              }}
+            >
+              {/* Icon + Title */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+                <div style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 12,
+                  background: confirmModal.confirmColor === '#2563eb' ? '#eff6ff' : '#fef2f2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 26,
+                  flexShrink: 0
+                }}>
+                  {confirmModal.icon}
+                </div>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', lineHeight: 1.3 }}>
+                    {confirmModal.title}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, fontWeight: 500 }}>
+                    {lang === 'ar' ? 'OFPPT - نظام إدارة الجدول' : 'OFPPT - Gestion des Emplois du Temps'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div style={{ height: 1, background: '#f1f5f9', margin: '0 0 18px' }} />
+
+              {/* Message */}
+              <p style={{
+                fontSize: 14,
+                color: '#334155',
+                lineHeight: 1.7,
+                margin: '0 0 24px',
+                padding: '14px 16px',
+                background: '#f8fafc',
+                borderRadius: 10,
+                border: '1px solid #e2e8f0',
+                direction: lang === 'ar' ? 'rtl' : 'ltr'
+              }}>
+                {confirmModal.message}
+              </p>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setConfirmModal(null)}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: '#f8fafc',
+                    color: '#475569',
+                    border: '1.5px solid #cbd5e1',
+                    borderRadius: 9,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f1f5f9'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#94a3b8' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f8fafc'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#cbd5e1' }}
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    confirmModal.onConfirm()
+                    setConfirmModal(null)
+                  }}
+                  style={{
+                    padding: '10px 22px',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    background: confirmModal.confirmColor,
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 9,
+                    cursor: 'pointer',
+                    boxShadow: `0 3px 10px ${confirmModal.confirmColor}55`,
+                    transition: 'all 0.15s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.9'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)' }}
+                >
+                  {confirmModal.confirmLabel}
+                </button>
               </div>
             </div>
           </div>
