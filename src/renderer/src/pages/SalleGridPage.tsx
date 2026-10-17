@@ -318,6 +318,16 @@ export default function SalleGridPage(): React.ReactElement {
   async function clearAll() {
     setGridData({})
     await planningSallesService.deleteAll()
+    try {
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith('edt_prof_')) keysToRemove.push(k)
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k))
+    } catch {
+      // ignore
+    }
     toast.success(lang === 'ar' ? 'تم تفريغ الجدول بنجاح' : 'Tableau vidé avec succès')
   }
 

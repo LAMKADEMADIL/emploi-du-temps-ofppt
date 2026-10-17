@@ -494,48 +494,6 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
         }
       }
 
-      // 4. Process cached formateur timetables from localStorage (edt_prof_*)
-      for (let i = 0; i < localStorage.length; i++) {
-        const lk = localStorage.key(i)
-        if (!lk || !lk.startsWith('edt_prof_')) continue
-        try {
-          const profData = JSON.parse(localStorage.getItem(lk) || '{}')
-          const profNameRaw = lk.replace('edt_prof_', '').replace(/_/g, ' ')
-          const profObj = formateurs.find(f => 
-            (f.nom_prenom && f.nom_prenom.toUpperCase().includes(profNameRaw.toUpperCase())) ||
-            (f.nom && f.nom.toUpperCase().includes(profNameRaw.toUpperCase()))
-          )
-          const profName = profObj ? (profObj.nom_prenom || profObj.nom || profNameRaw).toUpperCase() : profNameRaw.toUpperCase()
-
-          for (const [slotKey, slotVal] of Object.entries(profData)) {
-            if (!slotVal || !(slotVal as any).groupe) continue
-            const [day, slotIdxStr] = slotKey.split('_')
-            const slotIdx = parseInt(slotIdxStr, 10)
-            if (isNaN(slotIdx) || slotIdx < 0 || slotIdx > 3) continue
-
-            const grpCode = String((slotVal as any).groupe).toUpperCase().replace(/\s+/g, '')
-            const targetGroup = sectionGroupes.find(g => g.code_groupe.toUpperCase().replace(/\s+/g, '') === grpCode)
-            if (!targetGroup) continue
-
-            const jourUpper = day.toUpperCase()
-            const salleName = String((slotVal as any).salle || '').toUpperCase()
-            const cellData = {
-              nomFormateur: profName,
-              nomSalle: salleName,
-              module: (slotVal as any).module || 'M'
-            }
-
-            const codeKey = `${jourUpper}__${targetGroup.code_groupe.toUpperCase().replace(/\s+/g, '')}__${slotIdx}`
-            if (!schedule[codeKey]) {
-              schedule[codeKey] = cellData
-              if (targetGroup.id) schedule[`${jourUpper}__${targetGroup.id}__${slotIdx}`] = cellData
-            }
-          }
-        } catch (e) {
-          // ignore cache error
-        }
-      }
-
       setSelectedSection(prev => prev ? { ...prev, schedule, loading: false } : null)
     } catch (err) {
       console.error(err)
@@ -664,34 +622,6 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       }
     }
 
-    // 2. Vérifier aussi dans le cache localStorage des autres formateurs (edt_prof_*)
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const lKey = localStorage.key(i)
-        if (lKey && lKey.startsWith('edt_prof_')) {
-          const otherProfName = lKey.replace('edt_prof_', '').replace(/_/g, ' ')
-          if (!isSameFormateur(otherProfName, selectedProfName)) {
-            const rawVal = localStorage.getItem(lKey)
-            if (rawVal) {
-              const otherSchedule: ScheduleMap = JSON.parse(rawVal)
-              const otherSlot = otherSchedule[`${day}_${slotIdx}`]
-              if (otherSlot && otherSlot.groupe) {
-                const otherCleanG = otherSlot.groupe.trim().toUpperCase().replace(/\s+/g, '')
-                if (otherCleanG === cleanG) {
-                  return {
-                    formateur: otherProfName,
-                    salle: otherSlot.salle || 'Non définie'
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-
     return null
   }
 
@@ -701,7 +631,21 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     return `${occ.formateur} (${lang === 'ar' ? 'القاعة' : 'Salle'}: ${occ.salle})`
   }
 
-  // Load schedule for a formateur (from localStorage or firebase planning)
+  // Purge any legacy localStorage mock caches on startup
+  useEffect(() => {
+    try {
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith('edt_prof_')) keysToRemove.push(k)
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k))
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  // Load schedule for a formateur DIRECTLY from database (planning_salles in Firebase)
   async function openFormateurSchedule(profName: string, filiereCode: string) {
     setSelectedProfName(profName)
     setSelectedProfFiliere(filiereCode)
@@ -714,30 +658,36 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       // ignore
     }
 
-    // Check localStorage cache first
-    const cacheKey = `edt_prof_${profName.replace(/\s+/g, '_').toUpperCase()}`
-    const cached = localStorage.getItem(cacheKey)
-    let loadedSchedule: ScheduleMap = {}
+    // Charger les séances réelles de ce formateur UNIQUEMENT depuis la base de données Firebase
+    const loadedSchedule: ScheduleMap = {}
+    for (const [pk, pCell] of Object.entries(planningMap)) {
+      if (!pCell) continue
+      const parts = pk.split('__')
+      if (parts.length === 3) {
+        const pDay = parts[0]
+        const pSalle = parts[1]
+        const pSlotIdx = parseInt(parts[2], 10)
 
-    if (cached) {
-      try {
-        loadedSchedule = JSON.parse(cached)
-      } catch (e) {
-        loadedSchedule = {}
-      }
-    } else {
-      // Default sample data for demo if not found
-      loadedSchedule = {
-        'Lundi_0': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-        'Lundi_1': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-        'Lundi_2': { groupe: `${filiereCode}201`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-        'Lundi_3': { groupe: `${filiereCode}201`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-        'Mardi_0': { groupe: `${filiereCode}202`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-        'Mardi_1': { groupe: `${filiereCode}202`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-        'Mercredi_0': { groupe: `${filiereCode}201`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-        'Mercredi_1': { groupe: `${filiereCode}202`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-        'Jeudi_0': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-        'Jeudi_1': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true }
+        if (isSameFormateur(pCell.formateurId, profName)) {
+          // Normalize day to title case (e.g. LUNDI -> Lundi)
+          const dayCapitalized = pDay.charAt(0).toUpperCase() + pDay.slice(1).toLowerCase()
+          const key = `${dayCapitalized}_${pSlotIdx}`
+
+          const rawG = String(pCell.groupeId || '').trim()
+          const grpObj = groupes.find(g => 
+            g.id === rawG || 
+            g.code_groupe.toUpperCase().replace(/\s+/g, '') === rawG.toUpperCase().replace(/\s+/g, '')
+          )
+          const grpCode = grpObj ? grpObj.code_groupe : rawG
+
+          loadedSchedule[key] = {
+            groupe: grpCode,
+            module: pCell.module || 'M',
+            salle: pSalle,
+            syncedSalle: true,
+            syncedGroupe: true
+          }
+        }
       }
     }
 
@@ -796,10 +746,6 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
 
   function saveSchedule(updated: ScheduleMap) {
     setProfSchedule(updated)
-    if (selectedProfName) {
-      const cacheKey = `edt_prof_${selectedProfName.replace(/\s+/g, '_').toUpperCase()}`
-      localStorage.setItem(cacheKey, JSON.stringify(updated))
-    }
   }
 
   // Open cell editor
@@ -922,6 +868,21 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       toast.error(detectedConflict.message, { duration: 6000 })
     } else {
       toast.success(lang === 'ar' ? '✅ تم حفظ الحصة بنجاح !' : 'Séance enregistrée !')
+
+      // If room changed or cleared, remove previous room entry from planning
+      if (existing.salle && existing.salle.trim().toUpperCase() !== salleUpper) {
+        try {
+          const oldPlanningKey = `${dayUpper}__${existing.salle.trim().toUpperCase()}__${cellEditModal.slotIdx}`
+          await planningSallesService.deleteCell(oldPlanningKey)
+          setPlanningSallesMap(prev => {
+            const next = { ...prev }
+            delete next[oldPlanningKey]
+            return next
+          })
+        } catch (e) {
+          console.error(e)
+        }
+      }
 
       // Automatically sync to planningSalles ONLY if no conflict whatsoever
       if (editSalle && selectedProfName) {
