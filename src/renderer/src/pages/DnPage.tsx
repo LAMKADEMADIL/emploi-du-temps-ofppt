@@ -5,10 +5,7 @@ import {
   Search,
   Building2,
   Layers,
-  Plus,
-  Moon,
-  Trash2,
-  X
+  Moon
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
@@ -37,13 +34,6 @@ export default function DnPage(): React.ReactElement {
   // Excel import
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
-
-  // CDS Modal state
-  const [isCdsModalOpen, setIsCdsModalOpen] = useState(false)
-  const [selectedFiliereId, setSelectedFiliereId] = useState('')
-  const [cdsYear, setCdsYear] = useState<1 | 2 | 3>(1)
-  const [cdsGroupCode, setCdsGroupCode] = useState('')
-  const [isSavingCds, setIsSavingCds] = useState(false)
 
   // Editable cell values per row key persisted in localStorage
   const [synValues, setSynValues] = useState<Record<string, string>>(() => {
@@ -111,11 +101,6 @@ export default function DnPage(): React.ReactElement {
     localStorage.setItem('dn_extraColValues', JSON.stringify(extraColValues))
   }, [extraColValues])
 
-  function addExtraCol() {
-    const id = `col_${Date.now()}`
-    setExtraCols(prev => [...prev, { id, header: 'Nouveau' }])
-  }
-
   function removeExtraCol(colId: string) {
     setExtraCols(prev => prev.filter(c => c.id !== colId))
     setExtraColValues(prev => {
@@ -155,9 +140,6 @@ export default function DnPage(): React.ReactElement {
 
       setGroupes(mapped)
       setFilieres(filieresData)
-      if (filieresData.length > 0 && !selectedFiliereId) {
-        setSelectedFiliereId(filieresData[0].id || '')
-      }
     } catch (err) {
       console.error(err)
       toast.error(lang === 'ar' ? 'حدث خطأ أثناء تحميل البيانات' : 'Erreur lors du chargement des données')
@@ -218,7 +200,6 @@ export default function DnPage(): React.ReactElement {
         }
 
         for (const gCode of Array.from(foundGroups)) {
-          // Extract filiere code (e.g. "TEMI" from "TEMI101 CDS" or "TEMI101")
           const cleanCode = gCode.replace(/\s*CDS$/i, '')
           const filiereCode = cleanCode.replace(/\d+$/, '').trim()
 
@@ -270,54 +251,6 @@ export default function DnPage(): React.ReactElement {
       }
     }
     reader.readAsArrayBuffer(file)
-  }
-
-  // Quick Add CDS Group
-  async function handleAddCdsGroup(e: React.FormEvent) {
-    e.preventDefault()
-    if (!selectedFiliereId) {
-      toast.error(lang === 'ar' ? 'الرجاء اختيار الشعبة' : 'Veuillez sélectionner une filière')
-      return
-    }
-
-    const filiere = filieres.find(f => f.id === selectedFiliereId)
-    if (!filiere) return
-
-    let finalCode = cdsGroupCode.trim().toUpperCase()
-    if (!finalCode) {
-      // Auto generate code like TEMI101 CDS or TEMI301 CDS
-      finalCode = `${filiere.code_filiere}${cdsYear}01 CDS`
-    } else if (!finalCode.includes('CDS')) {
-      finalCode = `${finalCode} CDS`
-    }
-
-    // Check if group already exists
-    const exists = groupes.some(g => g.code_groupe.toUpperCase() === finalCode)
-    if (exists) {
-      toast.error(lang === 'ar' ? `الفوج "${finalCode}" موجود بالفعل!` : `Le groupe « ${finalCode} » existe déjà !`)
-      return
-    }
-
-    try {
-      setIsSavingCds(true)
-      await groupesService.add({
-        code_groupe: finalCode,
-        id_filiere: selectedFiliereId,
-        en_stage: false
-      })
-      toast.success(
-        lang === 'ar'
-          ? `تمت إضافة الفوج المسائي "${finalCode}" بنجاح!`
-          : `Groupe du soir « ${finalCode} » ajouté avec succès !`
-      )
-      setIsCdsModalOpen(false)
-      setCdsGroupCode('')
-      loadData()
-    } catch {
-      toast.error(lang === 'ar' ? 'حدث خطأ أثناء إضافة الفوج' : 'Erreur lors de l\'ajout du groupe')
-    } finally {
-      setIsSavingCds(false)
-    }
   }
 
   // Helper functions for CDS detection and year extraction
@@ -420,7 +353,6 @@ export default function DnPage(): React.ReactElement {
 
   // Sort CDS rows matching Excel style (e.g., TEMI300CDS, TEMI100CDS, RVA100CDS)
   cdsRows.sort((a, b) => {
-    // If TEMI, put 300CDS first, then 100CDS
     if (a.defaultName === b.defaultName) {
       return b.defaultCode.localeCompare(a.defaultCode)
     }
@@ -475,53 +407,8 @@ export default function DnPage(): React.ReactElement {
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action Buttons: Only Excel Import */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Add CDS Group Button */}
-          <button
-            type="button"
-            onClick={() => setIsCdsModalOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 16px',
-              fontSize: '13.5px',
-              fontWeight: 700,
-              background: '#fffbeb',
-              color: '#b45309',
-              border: '1.5px solid #fcd34d',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(245, 158, 11, 0.15)',
-              transition: 'all 0.2s'
-            }}
-            title={lang === 'ar' ? 'إضافة فوج دراسي مسائي CDS' : 'Ajouter un groupe de cours du soir CDS'}
-          >
-            <Moon size={16} color="#d97706" />
-            {lang === 'ar' ? '+ إضافة فوج مسائي (CDS)' : '+ Ajouter groupe CDS'}
-          </button>
-
-          {/* Add Extra Column Button */}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={addExtraCol}
-            style={{
-              padding: '10px 16px',
-              fontSize: '13.5px',
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-            title={lang === 'ar' ? 'إضافة عمود مخصص جديد' : 'Ajouter une colonne personnalisée'}
-          >
-            <Plus size={16} />
-            {lang === 'ar' ? 'إضافة عمود' : 'Ajouter colonne'}
-          </button>
-
-          {/* Import DN Sheet Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -608,16 +495,16 @@ export default function DnPage(): React.ReactElement {
             boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
           }}>
             <div>
-              <p style={{ fontSize: 13, color: '#d97706', margin: 0, fontWeight: 700 }}>
+              <p style={{ fontSize: 13, color: '#6b7280', margin: 0, fontWeight: 600 }}>
                 {lang === 'ar' ? 'أفواج الدروس المسائية (CDS)' : 'Groupes Cours du Soir (CDS)'}
               </p>
-              <h3 style={{ fontSize: 26, fontWeight: 800, color: '#b45309', margin: '4px 0 0 0' }}>
+              <h3 style={{ fontSize: 26, fontWeight: 800, color: '#0a0a0a', margin: '4px 0 0 0' }}>
                 {allCdsGroupes.length}
               </h3>
             </div>
             <div style={{
-              width: 44, height: 44, borderRadius: 10, background: '#fef3c7',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706'
+              width: 44, height: 44, borderRadius: 10, background: '#f8fafc',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b'
             }}>
               <Moon size={22} />
             </div>
@@ -760,36 +647,15 @@ export default function DnPage(): React.ReactElement {
                     </tr>
                   ))}
 
-                  {/* 2. Cours du Soir (CDS) Section Header at Bottom */}
-                  {cdsRows.length > 0 && (
-                    <tr style={{ background: '#fef3c7', borderBottom: '1.5px solid #000' }}>
-                      <td
-                        colSpan={5 + extraCols.length}
-                        style={{
-                          textAlign: 'center',
-                          padding: '8px 12px',
-                          fontWeight: 800,
-                          fontSize: '14px',
-                          color: '#b45309',
-                          letterSpacing: '0.5px',
-                          borderBottom: '1.5px solid #000',
-                          borderTop: '2px solid #d97706'
-                        }}
-                      >
-                        🌙 {lang === 'ar' ? 'شعب الدروس المسائية — Cours du Soir (CDS)' : 'Filières Cours du Soir (CDS)'}
-                      </td>
-                    </tr>
-                  )}
-
-                  {/* 3. Cours du Soir (CDS) Rows at Bottom (TEMI300CDS, TEMI100CDS, RVA100CDS...) */}
+                  {/* 2. Cours du Soir (CDS) Rows at Bottom (TEMI300CDS, TEMI100CDS, RVA100CDS...) with identical normal style */}
                   {cdsRows.map((row) => (
-                    <tr key={row.rowKey} style={{ background: '#fffbeb' }}>
-                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#b45309', fontWeight: 800, fontSize: '15px' }}>
+                    <tr key={row.rowKey}>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
                         <input
                           type="text"
                           value={codeValues[row.rowKey] ?? row.defaultCode}
                           onChange={(e) => setCodeValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                          style={{ ...inputStyle, color: '#b45309', fontWeight: 800 }}
+                          style={inputStyle}
                         />
                       </td>
                       <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
@@ -844,125 +710,6 @@ export default function DnPage(): React.ReactElement {
           )}
         </div>
       </div>
-
-      {/* Modal for Adding a CDS Group */}
-      {isCdsModalOpen && (
-        <div className="modal-overlay" onClick={() => !isSavingCds && setIsCdsModalOpen(false)}>
-          <div
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: 440,
-              width: '92%',
-              padding: '28px 26px 24px',
-              borderRadius: 20,
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: 10,
-                  background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  border: '2px solid #fcd34d'
-                }}>
-                  <Moon size={20} color="#d97706" />
-                </div>
-                <h3 style={{ fontSize: 19, fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                  {lang === 'ar' ? 'إضافة فوج مسائي (CDS)' : 'Ajouter un groupe CDS'}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCdsModalOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddCdsGroup}>
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label" style={{ fontWeight: 700, fontSize: 13.5 }}>
-                  {lang === 'ar' ? 'الشعبة' : 'Filière'}
-                </label>
-                <select
-                  className="form-select"
-                  value={selectedFiliereId}
-                  onChange={(e) => setSelectedFiliereId(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1' }}
-                >
-                  {filieres.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.code_filiere} — {f.nom_filiere}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label" style={{ fontWeight: 700, fontSize: 13.5 }}>
-                  {lang === 'ar' ? 'السنة / المستوى' : 'Année / Niveau'}
-                </label>
-                <select
-                  className="form-select"
-                  value={cdsYear}
-                  onChange={(e) => setCdsYear(Number(e.target.value) as 1 | 2 | 3)}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1' }}
-                >
-                  <option value={1}>{lang === 'ar' ? 'السنة 1 (مثال: 100 CDS)' : '1ère Année (ex: 100 CDS)'}</option>
-                  <option value={2}>{lang === 'ar' ? 'السنة 2 (مثال: 200 CDS)' : '2ème Année (ex: 200 CDS)'}</option>
-                  <option value={3}>{lang === 'ar' ? 'السنة 3 (مثال: 300 CDS)' : '3ème Année (ex: 300 CDS)'}</option>
-                </select>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 20 }}>
-                <label className="form-label" style={{ fontWeight: 700, fontSize: 13.5 }}>
-                  {lang === 'ar' ? 'رمز الفوج (اختياري، يترك فارغاً للتوليد التلقائي)' : 'Code du groupe (optionnel)'}
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder={lang === 'ar' ? 'مثال: TEMI101 CDS أو RVA101 CDS' : 'Ex: TEMI101 CDS ou TEMI301 CDS'}
-                  value={cdsGroupCode}
-                  onChange={(e) => setCdsGroupCode(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setIsCdsModalOpen(false)}
-                  disabled={isSavingCds}
-                  style={{ padding: '9px 18px', borderRadius: 8 }}
-                >
-                  {lang === 'ar' ? 'إلغاء' : 'Annuler'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingCds}
-                  style={{
-                    padding: '9px 20px',
-                    borderRadius: 8,
-                    fontWeight: 700,
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                    color: 'white',
-                    cursor: isSavingCds ? 'wait' : 'pointer'
-                  }}
-                >
-                  {isSavingCds
-                    ? (lang === 'ar' ? 'جارٍ الإضافة...' : 'Ajout...')
-                    : (lang === 'ar' ? 'إضافة الفوج' : 'Ajouter')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
