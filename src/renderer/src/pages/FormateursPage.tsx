@@ -178,13 +178,20 @@ export default function FormateursPage(): React.ReactElement {
           return
         }
 
-        const firstRow = rows[0].map((c) => String(c ?? '').trim().toLowerCase())
+        const normalizeStr = (s: any) =>
+          String(s ?? '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim()
+
+        const firstRow = rows[0].map(normalizeStr)
 
         // ── تحديد هيكل الأعمدة ──────────────────────────────────────────────
         const hasHeader = firstRow.some((cell) =>
           cell.includes('matr') || cell.includes('mle') || cell.includes('مترك') ||
-          cell.includes('nom') || cell.includes('نسب') || cell.includes('لقب') ||
-          cell.includes('prenom') || cell.includes('prénom') || cell.includes('اسم')
+          cell.includes('prenom') || cell.includes('اسم') ||
+          cell.includes('nom') || cell.includes('نسب') || cell.includes('لقب')
         )
 
         let matriculeIdx = 0
@@ -195,29 +202,64 @@ export default function FormateursPage(): React.ReactElement {
 
         if (hasHeader) {
           firstRow.forEach((cell, idx) => {
-            if (cell.includes('matr') || cell.includes('mle') || cell.includes('مترك') || cell.includes('code')) {
+            // 1. رقم التأجير / Matricule
+            if (cell.includes('matr') || cell.includes('mle') || cell.includes('مترك') || cell.includes('code') || cell === 'id') {
               matriculeIdx = idx
-            } else if (
-              // عمود مجمّع "nom et prénom" أو "nom & prénom"
-              (cell.includes('nom') && cell.includes('pr')) ||
-              (cell.includes('اسم') && cell.includes('نسب')) ||
-              cell === 'nom et prénom' || cell === 'nom & prénom' || cell === 'الاسم واللقب'
-            ) {
+              return
+            }
+
+            // 2. عمود مجمّع صريح "Nom et Prénom" أو "الاسم الكامل"
+            const isCombined =
+              cell.includes('nom et prenom') ||
+              cell.includes('nom & prenom') ||
+              cell.includes('nom_prenom') ||
+              cell.includes('nom prenom') ||
+              cell.includes('prenom et nom') ||
+              cell.includes('prenom & nom') ||
+              cell.includes('nom complet') ||
+              cell.includes('nomcomplet') ||
+              (cell.includes('اسم') && (cell.includes('نسب') || cell.includes('لقب'))) ||
+              cell.includes('الاسم الكامل') ||
+              cell === 'الاسم واللقب'
+
+            if (isCombined) {
               nomPrenomIdx = idx
-            } else if (cell.includes('prenom') || cell.includes('prénom') || cell === 'اسم') {
+              return
+            }
+
+            // 3. عمود الاسم الشخصي / Prénom
+            // يجب فحصه قبل Nom لأن كلمة prenom تنتهي بأحرف nom !
+            const isPrenom =
+              cell.includes('prenom') ||
+              cell === 'first name' ||
+              cell === 'firstname' ||
+              cell === 'اسم' ||
+              cell.includes('شخصي')
+
+            if (isPrenom) {
               prenomIdx = idx
-            } else if (cell.includes('nom') || cell.includes('نسب') || cell.includes('لقب')) {
+              return
+            }
+
+            // 4. عمود اللقب / النسب / Nom (فقط إذا لم يكن Prénom)
+            const isNom =
+              cell.includes('nom') ||
+              cell === 'last name' ||
+              cell === 'lastname' ||
+              cell.includes('نسب') ||
+              cell.includes('لقب') ||
+              cell.includes('عائلي')
+
+            if (isNom) {
               nomIdx = idx
+              return
             }
           })
 
-          // إذا لم يُعثر على عمود prénom منفصل → يبحث في عمود nom عن "Nom et Prénom"
+          // إذا وُجد عمود nom فقط ولم يوجد prénom ولا عمود مجمع، نتحقق من أول خلية إن كانت تحتوي على مسافة "NOM PRENOM"
           if (prenomIdx === -1 && nomIdx !== -1 && nomPrenomIdx === -1) {
-            // قد يكون عمود nom هو في الواقع "Nom et Prénom"
-            // نتحقق من أول صف بيانات
             const sampleCell = String(rows[startIdx]?.[nomIdx] ?? '').trim()
             if (sampleCell.includes(' ')) {
-              // الاسم مجمّع في هذا العمود
               nomPrenomIdx = nomIdx
               nomIdx = -1
             }
@@ -408,7 +450,10 @@ export default function FormateursPage(): React.ReactElement {
             }}
             onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
             onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              setImportedList([])
+              setIsImportModalOpen(true)
+            }}
             title={lang === 'ar' ? 'استيراد من حاسوب ملف Excel (رقم التسجيل، النسب، الاسم)' : 'Importer depuis Excel (Matricule, Nom, Prénom)'}
           >
             <FileSpreadsheet size={18} />
@@ -465,7 +510,10 @@ export default function FormateursPage(): React.ReactElement {
                     borderRadius: 'var(--radius-md)',
                     cursor: 'pointer'
                   }}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    setImportedList([])
+                    setIsImportModalOpen(true)
+                  }}
                 >
                   <FileSpreadsheet size={16} />
                   {lang === 'ar' ? 'استيراد من Excel' : 'Importer Excel'}
@@ -802,9 +850,13 @@ export default function FormateursPage(): React.ReactElement {
                     {lang === 'ar' ? 'معاينة واستيراد ملف Excel' : 'Aperçu et importation Excel'}
                   </h3>
                   <p style={{ fontSize: 13, color: '#4b5563', margin: '3px 0 0 0' }}>
-                    {lang === 'ar'
-                      ? `تم العثور على ${importedList.length} أستاذ جاهز للاستيراد`
-                      : `${importedList.length} formateur(s) trouvé(s) dans le fichier`}
+                    {importedList.length > 0
+                      ? (lang === 'ar'
+                          ? `تم العثور على ${importedList.length} أستاذ جاهز للاستيراد`
+                          : `${importedList.length} formateur(s) trouvé(s) dans le fichier`)
+                      : (lang === 'ar'
+                          ? 'اختر ملف Excel من حاسوبك لمعاينة واستيراد الأساتذة'
+                          : 'Sélectionnez un fichier Excel pour importer les formateurs')}
                   </p>
                 </div>
               </div>
@@ -917,58 +969,105 @@ export default function FormateursPage(): React.ReactElement {
 
             </div>
 
-            {/* Table Preview */}
-            <div style={{
-              maxHeight: 280,
-              overflowY: 'auto',
-              border: '1.5px solid #e5e7eb',
-              borderRadius: 10,
-              marginBottom: 20
-            }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                <thead>
-                  <tr style={{ background: '#f3f4f6', position: 'sticky', top: 0, zIndex: 1 }}>
-                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'center', width: 45 }}>#</th>
-                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'left' }}>{lang === 'ar' ? 'رقم التسجيل' : 'Matricule'}</th>
-                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'left' }}>{lang === 'ar' ? 'النسب' : 'Nom'}</th>
-                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'left' }}>{lang === 'ar' ? 'الاسم' : 'Prénom'}</th>
-                    <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'center', width: 110 }}>{lang === 'ar' ? 'الحالة' : 'État'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importedList.map((row, idx) => {
-                    const isExisting = formateurs.some(
-                      (f) => f.matricule.trim().toLowerCase() === row.matricule.trim().toLowerCase()
-                    )
-                    return (
-                      <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                        <td style={{ padding: '10px 14px', textAlign: 'center', color: '#6b7280', fontSize: 12, fontWeight: 600 }}>{idx + 1}</td>
-                        <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0a0a0a' }}>{row.matricule || '—'}</td>
-                        <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0a0a0a', textTransform: 'uppercase' }}>{row.nom || '—'}</td>
-                        <td style={{ padding: '10px 14px', fontWeight: 600, color: '#0a0a0a' }}>{row.prenom || '—'}</td>
-                        <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                          {isExisting ? (
-                            <span style={{
-                              fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
-                              background: '#fef3c7', color: '#b45309'
-                            }}>
-                              {lang === 'ar' ? 'تحديث' : 'Mise à jour'}
-                            </span>
-                          ) : (
-                            <span style={{
-                              fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
-                              background: '#dcfce7', color: '#15803d'
-                            }}>
-                              {lang === 'ar' ? 'جديد' : 'Nouveau'}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            {/* ── File Selection Zone ── */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                margin: '12px 0 16px',
+                padding: importedList.length > 0 ? '12px 16px' : '26px 20px',
+                background: importedList.length > 0 ? '#f0fdf4' : '#f8fafc',
+                border: importedList.length > 0 ? '1.5px solid #86efac' : '2px dashed #10b981',
+                borderRadius: 12,
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+                flexWrap: 'wrap'
+              }}
+            >
+              <div style={{
+                width: importedList.length > 0 ? 36 : 46,
+                height: importedList.length > 0 ? 36 : 46,
+                borderRadius: 10,
+                background: '#dcfce7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#15803d'
+              }}>
+                <FileSpreadsheet size={importedList.length > 0 ? 20 : 24} />
+              </div>
+              <div style={{ textAlign: importedList.length > 0 ? 'left' : 'center' }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                  {importedList.length > 0
+                    ? (lang === 'ar' ? `✅ تم استخراج ${importedList.length} أستاذ (اضغط هنا لاختيار ملف آخر)` : `✅ ${importedList.length} formateur(s) extrait(s) (Cliquer pour changer de fichier)`)
+                    : (lang === 'ar' ? '📂 انقر هنا لاختيار ملف Excel من حاسوبك' : '📂 Cliquez ici pour choisir le fichier Excel (.xlsx, .xls)')}
+                </div>
+                {importedList.length === 0 && (
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                    {lang === 'ar' ? 'يدعم ملفات .xlsx و .xls بكلا الهيكلين (عمودان أو 3 أعمدة)' : 'Compatible avec fichiers .xlsx et .xls (2 ou 3 colonnes)'}
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Table Preview (Shown when file is loaded) */}
+            {importedList.length > 0 && (
+              <div style={{
+                maxHeight: 280,
+                overflowY: 'auto',
+                border: '1.5px solid #e5e7eb',
+                borderRadius: 10,
+                marginBottom: 20
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                  <thead>
+                    <tr style={{ background: '#f3f4f6', position: 'sticky', top: 0, zIndex: 1 }}>
+                      <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'center', width: 45 }}>#</th>
+                      <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'left' }}>{lang === 'ar' ? 'رقم التسجيل' : 'Matricule'}</th>
+                      <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'left' }}>{lang === 'ar' ? 'النسب' : 'Nom'}</th>
+                      <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'left' }}>{lang === 'ar' ? 'الاسم' : 'Prénom'}</th>
+                      <th style={{ padding: '10px 14px', fontSize: 13, fontWeight: 800, color: '#0a0a0a', textAlign: 'center', width: 110 }}>{lang === 'ar' ? 'الحالة' : 'État'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importedList.map((row, idx) => {
+                      const isExisting = formateurs.some(
+                        (f) => f.matricule.trim().toLowerCase() === row.matricule.trim().toLowerCase()
+                      )
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                          <td style={{ padding: '10px 14px', textAlign: 'center', color: '#6b7280', fontSize: 12, fontWeight: 600 }}>{idx + 1}</td>
+                          <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0a0a0a' }}>{row.matricule || '—'}</td>
+                          <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0a0a0a', textTransform: 'uppercase' }}>{row.nom || '—'}</td>
+                          <td style={{ padding: '10px 14px', fontWeight: 600, color: '#0a0a0a' }}>{row.prenom || '—'}</td>
+                          <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                            {isExisting ? (
+                              <span style={{
+                                fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+                                background: '#fef3c7', color: '#b45309'
+                              }}>
+                                {lang === 'ar' ? 'تحديث' : 'Mise à jour'}
+                              </span>
+                            ) : (
+                              <span style={{
+                                fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+                                background: '#dcfce7', color: '#15803d'
+                              }}>
+                                {lang === 'ar' ? 'جديد' : 'Nouveau'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="modal-footer" style={{ marginTop: 0, justifyContent: 'flex-end', gap: 12 }}>
@@ -981,32 +1080,34 @@ export default function FormateursPage(): React.ReactElement {
               >
                 {lang === 'ar' ? 'إلغاء' : 'Annuler'}
               </button>
-              <button
-                type="button"
-                disabled={isImporting}
-                onClick={handleConfirmImport}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '10px 24px',
-                  borderRadius: 'var(--radius-md)',
-                  fontWeight: 700,
-                  fontSize: 14,
-                  cursor: isImporting ? 'not-allowed' : 'pointer',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  color: 'white',
-                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
-                  opacity: isImporting ? 0.7 : 1,
-                  transition: 'all 0.2s'
-                }}
-              >
-                <CheckCircle2 size={16} />
-                {isImporting
-                  ? (lang === 'ar' ? 'جاري الاستيراد...' : 'Importation en cours...')
-                  : (lang === 'ar' ? `تأكيد استيراد (${importedList.length})` : `Confirmer l'importation (${importedList.length})`)}
-              </button>
+              {importedList.length > 0 && (
+                <button
+                  type="button"
+                  disabled={isImporting}
+                  onClick={handleConfirmImport}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 24px',
+                    borderRadius: 'var(--radius-md)',
+                    fontWeight: 700,
+                    fontSize: 14,
+                    cursor: isImporting ? 'not-allowed' : 'pointer',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    color: 'white',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                    opacity: isImporting ? 0.7 : 1,
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  {isImporting
+                    ? (lang === 'ar' ? 'جاري الاستيراد...' : 'Importation en cours...')
+                    : (lang === 'ar' ? `تأكيد استيراد (${importedList.length})` : `Confirmer l'importation (${importedList.length})`)}
+                </button>
+              )}
             </div>
           </div>
         </div>
