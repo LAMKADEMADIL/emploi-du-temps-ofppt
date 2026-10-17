@@ -553,6 +553,21 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     const key = `${cellEditModal.day}_${cellEditModal.slotIdx}`
     const existing = profSchedule[key] || { syncedSalle: true, syncedGroupe: true }
 
+    // ── Vérifier si le groupe sélectionné est en stage
+    if (editGroupe && editGroupe.trim() && editGroupe !== '-') {
+      const cleanG = editGroupe.trim().toUpperCase()
+      const targetGrp = groupes.find(g => g.code_groupe.toUpperCase().trim() === cleanG)
+      if (targetGrp && targetGrp.en_stage) {
+        toast.error(
+          lang === 'ar'
+            ? `⚠️ لا يمكن برمجة الفوج (${cleanG}) لأنه في فترة تدريب ميداني خارج المؤسسة (En Stage) !`
+            : `⚠️ Impossible d'assigner le groupe (${cleanG}) car il est actuellement en stage hors établissement !`,
+          { duration: 6000 }
+        )
+        return
+      }
+    }
+
     const dayUpper = cellEditModal.day.toUpperCase()
     const salleUpper = (editSalle || '').trim().toUpperCase()
     const timeLabel = TIMESLOTS[cellEditModal.slotIdx]?.label || ''
@@ -932,17 +947,21 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     })
 
     // Sort alphabetically (e.g. EM101, EM102, EM201, EM202)
-    const result = Array.from(matchedGroupCodes).sort((a, b) => a.localeCompare(b))
+    let result = Array.from(matchedGroupCodes).sort((a, b) => a.localeCompare(b))
 
     // Fallback: if no group matched, show groups filtered by filiere or database groups
     if (result.length === 0) {
       const filiereGroups = profFiliereCode 
         ? groupes.filter(g => g.code_groupe.toUpperCase().startsWith(profFiliereCode)).map(g => g.code_groupe)
         : []
-      return filiereGroups.length > 0 ? filiereGroups.sort((a, b) => a.localeCompare(b)) : groupes.map(g => g.code_groupe).slice(0, 12)
+      result = filiereGroups.length > 0 ? filiereGroups.sort((a, b) => a.localeCompare(b)) : groupes.map(g => g.code_groupe).slice(0, 12)
     }
 
-    return result
+    // ── Exclure les groupes en stage (les groupes en stage sont hors établissement)
+    const inStageCodes = new Set(
+      groupes.filter(g => g.en_stage).map(g => g.code_groupe.toUpperCase().trim())
+    )
+    return result.filter(code => !inStageCodes.has(code.toUpperCase().trim()))
   }, [selectedProfName, selectedProfFiliere, formateurs, groupes, profSchedule])
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1106,28 +1125,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                               const keyWithCode = `${jourUpper}__${groupe.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`
                               const cell = (keyWithId && selectedSection.schedule[keyWithId]) || selectedSection.schedule[keyWithCode]
 
-                              // 1. If an actual session exists, ALWAYS show it (Nuance de gris officiel)
-                              if (cell && (cell.nomFormateur || cell.nomSalle)) {
-                                return (
-                                  <td
-                                    key={tsIdx}
-                                    style={{
-                                      border: '1.5px solid #000',
-                                      textAlign: 'center',
-                                      fontSize: 11,
-                                      padding: '6px 4px',
-                                      fontWeight: 800,
-                                      color: '#0f172a',
-                                      background: '#e2e8f0',
-                                      userSelect: 'none'
-                                    }}
-                                  >
-                                    {cell.nomFormateur} - {cell.nomSalle}
-                                  </td>
-                                )
-                              }
-
-                              // 2. If group is in stage, show "Stage" (Gris clair sobre)
+                              // 1. If group is in stage, it takes full priority for all slots from 8h30 to 18h30 (Gris clair sobre)
                               if (isEnStage) {
                                 return (
                                   <td
@@ -1145,6 +1143,27 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                     }}
                                   >
                                     Stage
+                                  </td>
+                                )
+                              }
+
+                              // 2. Otherwise if an actual session exists, show it (Nuance de gris officiel)
+                              if (cell && (cell.nomFormateur || cell.nomSalle)) {
+                                return (
+                                  <td
+                                    key={tsIdx}
+                                    style={{
+                                      border: '1.5px solid #000',
+                                      textAlign: 'center',
+                                      fontSize: 11,
+                                      padding: '6px 4px',
+                                      fontWeight: 800,
+                                      color: '#0f172a',
+                                      background: '#e2e8f0',
+                                      userSelect: 'none'
+                                    }}
+                                  >
+                                    {cell.nomFormateur} - {cell.nomSalle}
                                   </td>
                                 )
                               }
@@ -1413,6 +1432,11 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                         </td>
                         {TIMESLOTS.map((_, slotIdx) => {
                           const slot = profSchedule[`${day}_${slotIdx}`]
+                          const cleanGrp = (slot?.groupe || '').toUpperCase().trim()
+                          const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
+                            ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
+                            : false
+
                           return (
                             <td
                               key={slotIdx}
@@ -1422,17 +1446,18 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                 borderBottom: '1px solid #cbd5e1',
                                 padding: '6px 4px',
                                 fontWeight: 800,
-                                fontSize: 14,
-                                color: slot?.groupe ? '#0f172a' : '#94a3b8',
+                                fontSize: isSlotGroupInStage ? 12 : 14,
+                                fontStyle: isSlotGroupInStage ? 'italic' : 'normal',
+                                color: isSlotGroupInStage ? '#64748b' : (slot?.groupe ? '#0f172a' : '#94a3b8'),
                                 cursor: 'pointer',
-                                background: slot?.groupe ? '#f8fafc' : '#ffffff',
+                                background: isSlotGroupInStage ? '#f1f5f9' : (slot?.groupe ? '#f8fafc' : '#ffffff'),
                                 transition: 'background 0.15s'
                               }}
                               onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0' }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = slot?.groupe ? '#f8fafc' : '#ffffff' }}
-                              title="Cliquer pour modifier cette séance"
+                              onMouseLeave={(e) => { e.currentTarget.style.background = isSlotGroupInStage ? '#f1f5f9' : (slot?.groupe ? '#f8fafc' : '#ffffff') }}
+                              title={isSlotGroupInStage ? `Le groupe ${slot?.groupe} est en stage en entreprise (hors établissement)` : "Cliquer pour modifier cette séance"}
                             >
-                              {slot?.groupe || '-'}
+                              {isSlotGroupInStage ? 'Stage' : (slot?.groupe || '-')}
                             </td>
                           )
                         })}
@@ -1445,6 +1470,11 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                         </td>
                         {TIMESLOTS.map((_, slotIdx) => {
                           const slot = profSchedule[`${day}_${slotIdx}`]
+                          const cleanGrp = (slot?.groupe || '').toUpperCase().trim()
+                          const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
+                            ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
+                            : false
+
                           return (
                             <td
                               key={slotIdx}
@@ -1454,11 +1484,11 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                 borderBottom: '1px solid #cbd5e1',
                                 padding: '4px',
                                 fontWeight: 700,
-                                color: '#475569',
+                                color: isSlotGroupInStage ? '#94a3b8' : '#475569',
                                 cursor: 'pointer'
                               }}
                             >
-                              {slot?.module || '-'}
+                              {isSlotGroupInStage ? '-' : (slot?.module || '-')}
                             </td>
                           )
                         })}
@@ -1471,7 +1501,12 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                         </td>
                         {TIMESLOTS.map((_, slotIdx) => {
                           const slot = profSchedule[`${day}_${slotIdx}`]
-                          const hasConflict = !!slot?.conflit
+                          const cleanGrp = (slot?.groupe || '').toUpperCase().trim()
+                          const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
+                            ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
+                            : false
+                          const hasConflict = !isSlotGroupInStage && !!slot?.conflit
+
                           return (
                             <td
                               key={slotIdx}
@@ -1480,16 +1515,22 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                 borderRight: slotIdx < 3 ? '1.5px solid #000' : 'none',
                                 padding: '4px',
                                 fontWeight: hasConflict ? 900 : 800,
-                                color: hasConflict ? '#ffffff' : (slot?.salle ? '#1d4ed8' : '#94a3b8'),
+                                color: isSlotGroupInStage ? '#94a3b8' : (hasConflict ? '#ffffff' : (slot?.salle ? '#1d4ed8' : '#94a3b8')),
                                 cursor: 'pointer',
-                                background: hasConflict ? '#dc2626' : (slot?.salle ? '#eff6ff' : 'transparent'),
+                                background: isSlotGroupInStage ? '#f8fafc' : (hasConflict ? '#dc2626' : (slot?.salle ? '#eff6ff' : 'transparent')),
                                 textAlign: 'center',
                                 transition: 'all 0.15s ease',
                                 position: 'relative'
                               }}
-                              title={hasConflict ? slot?.conflit?.message : (slot?.salle ? `Salle: ${slot.salle} (Cliquer pour modifier)` : 'Cliquer pour assigner une salle')}
+                              title={
+                                isSlotGroupInStage
+                                  ? 'Groupe en stage en entreprise (aucune salle occupée)'
+                                  : (hasConflict ? slot?.conflit?.message : (slot?.salle ? `Salle: ${slot.salle} (Cliquer pour modifier)` : 'Cliquer pour assigner une salle'))
+                              }
                             >
-                              {hasConflict ? (
+                              {isSlotGroupInStage ? (
+                                '-'
+                              ) : hasConflict ? (
                                 <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                                   <span>⚠️</span>
                                   <span>{slot?.salle}</span>
@@ -1553,7 +1594,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                     autoFocus
                   />
                   <datalist id="formateur-groupes-list">
-                    {groupes.map(g => (
+                    {groupes.filter(g => !g.en_stage).map(g => (
                       <option key={g.id} value={g.code_groupe} />
                     ))}
                   </datalist>
