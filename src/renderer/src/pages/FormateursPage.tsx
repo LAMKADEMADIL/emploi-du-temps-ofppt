@@ -17,6 +17,7 @@ export default function FormateursPage(): React.ReactElement {
   const [matricule, setMatricule] = useState('')
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
+  const [matiere, setMatiere] = useState('Technique')
 
   // Confirm delete state
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -49,6 +50,7 @@ export default function FormateursPage(): React.ReactElement {
     if (formateur) {
       setEditingId(formateur.id!)
       setMatricule(formateur.matricule)
+      setMatiere(formateur.matiere || 'Technique')
       // Support both old nom_prenom and new prenom/nom
       if (formateur.prenom !== undefined) {
         setPrenom(formateur.prenom)
@@ -63,6 +65,7 @@ export default function FormateursPage(): React.ReactElement {
       setMatricule('')
       setPrenom('')
       setNom('')
+      setMatiere('Technique')
     }
     setIsModalOpen(true)
   }
@@ -83,7 +86,8 @@ export default function FormateursPage(): React.ReactElement {
       matricule,
       prenom,
       nom,
-      nom_prenom: `${prenom} ${nom}`
+      nom_prenom: `${prenom} ${nom}`,
+      matiere
     }
 
     try {
@@ -528,6 +532,7 @@ export default function FormateursPage(): React.ReactElement {
                     <th style={thStyle}>{lang === 'ar' ? 'رقم التسجيل' : 'Matricule'}</th>
                     <th style={thStyle}>{lang === 'ar' ? 'الاسم' : 'Prénom'}</th>
                     <th style={thStyle}>{lang === 'ar' ? 'اللقب' : 'Nom'}</th>
+                    <th style={thStyle}>{lang === 'ar' ? 'المادة / التخصص' : 'Matière / Spécialité'}</th>
                     <th style={{ ...thStyle, textAlign: 'center' }}>{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
                 </thead>
@@ -535,6 +540,8 @@ export default function FormateursPage(): React.ReactElement {
                   {formateurs.map((f, idx) => {
                     const prenomVal = f.prenom ?? f.nom_prenom.split(' ')[0]
                     const nomVal = f.nom ?? f.nom_prenom.split(' ').slice(1).join(' ')
+                    const matiereVal = f.matiere || 'Technique'
+                    const isComm = ['Français', 'Anglais', 'Arabe', 'Soft Skills', 'Culture Entreprise', 'Culture Numérique'].includes(matiereVal)
                     return (
                       <tr
                         key={f.id}
@@ -558,6 +565,20 @@ export default function FormateursPage(): React.ReactElement {
                         </td>
                         <td style={tdStyle}>
                           <span style={{ fontWeight: 700, fontSize: 17, color: '#0a0a0a', textTransform: 'uppercase' }}>{nomVal}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            background: isComm ? '#fef3c7' : '#eff6ff',
+                            color: isComm ? '#b45309' : '#1d4ed8',
+                            border: `1px solid ${isComm ? '#fde68a' : '#bfdbfe'}`
+                          }}>
+                            {matiereVal}
+                          </span>
                         </td>
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
@@ -663,6 +684,25 @@ export default function FormateursPage(): React.ReactElement {
                     onChange={(e) => setNom(e.target.value)}
                   />
                 </div>
+              </div>
+
+              {/* Matière / Spécialité */}
+              <div className="form-group" style={{ marginTop: 14 }}>
+                <label className="form-label">{lang === 'ar' ? 'المادة / التخصص (Matière)' : 'Matière / Spécialité'}</label>
+                <select
+                  className="form-select"
+                  value={matiere}
+                  onChange={(e) => setMatiere(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1', fontSize: 14, fontWeight: 600 }}
+                >
+                  <option value="Technique">{lang === 'ar' ? 'تخصص تقني / مهني (Filière technique)' : 'Filière technique'}</option>
+                  <option value="Français">Français (لغة فرنسية)</option>
+                  <option value="Anglais">Anglais (لغة إنجليزية)</option>
+                  <option value="Arabe">Arabe (لغة عربية)</option>
+                  <option value="Soft Skills">Soft Skills (مهارات حياتية)</option>
+                  <option value="Culture Entreprise">Culture Entreprise (ثقافة المقاولة)</option>
+                  <option value="Culture Numérique">Culture Numérique (ثقافة رقمية)</option>
+                </select>
               </div>
 
               <div className="modal-footer" style={{ marginTop: 24 }}>

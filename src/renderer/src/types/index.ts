@@ -9,6 +9,7 @@ export interface Formateur {
   prenom?: string
   nom?: string
   groupes_assignes?: string[] // Array of group codes or IDs assigned to this formateur
+  matiere?: string // e.g., 'Français', 'Anglais', 'Arabe', 'Soft Skills', 'Culture Entreprise', 'Culture Numérique', or 'Technique'
   createdAt?: Date
 }
 

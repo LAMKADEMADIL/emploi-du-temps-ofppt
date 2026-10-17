@@ -16,7 +16,9 @@ import {
   Trash2,
   Share2,
   Layers,
-  DoorOpen
+  DoorOpen,
+  X,
+  Check
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -38,31 +40,45 @@ interface FallbackFiliereInfo {
   annee1: string
   annee2: string
   anneeExtra?: string
+  cdsList?: string[]
 }
 
 const DEFAULT_FALLBACK_COLS: FallbackFiliereInfo[] = [
-  { filiere: 'AEFGT', profs: ['BERRADA', 'MEBSOUT', 'ASSOULI'], annee1: 'AEFGT100', annee2: 'AEFGT200' },
-  { filiere: 'CPA', profs: ['EDDAMIRI', 'MAAZOUZ'], annee1: 'CPA100', annee2: 'CPA200' },
-  { filiere: 'EEI', profs: ['ELKHALIDY', 'ASSOULI', 'HANNANE'], annee1: 'EEI100', annee2: 'EEI200' },
-  { filiere: 'EM', profs: ['ESSFADI', 'BOUDABLIJ'], annee1: 'EM100', annee2: 'EM200' },
-  { filiere: 'ESA', profs: ['CHGORA', 'LOUARGUI', 'AZAROUAL', 'WAHOUB', 'ABOUTARIK', 'ZARIOH'], annee1: 'ESA100', annee2: 'ESA200' },
-  { filiere: 'M/MOAB', profs: ['LAMALEM', 'ROUAGHI', 'BAHASSOUNE', 'ELAMIR', 'OUAKIF', 'KHANNIBA', 'MESSOUR'], annee1: 'M100', annee2: 'MOAB200' },
-  { filiere: 'OPCM', profs: ['BIALA', 'ABOUTARA', 'FITHANE', 'HANAFI'], annee1: 'OPCM100', annee2: 'OPCM200' },
-  { filiere: 'PC', profs: ['DOUHOU', 'KHOUTAM'], annee1: 'PC100', annee2: 'PC200' },
-  { filiere: 'RVA', profs: ['RMILI', 'ELHARFI', 'CHAHID', 'CHAFIKI', 'ZOUBID'], annee1: 'RVA100', annee2: 'RVA200', anneeExtra: 'RVA100CDS' },
-  { filiere: 'TCM', profs: ['NASRI', 'HANAFI'], annee1: 'TCM100', annee2: 'TCM200' },
-  { filiere: 'TFM', profs: ['ABOUTARIK', 'BADDI'], annee1: 'TFM100', annee2: 'TFM200' },
-  { filiere: 'TREM', profs: ['ELABDANI', 'ELHARFI', 'CHAFIKI', 'ZOUBID', 'FITHANE'], annee1: 'TREM100', annee2: 'TREM200' }
+  { filiere: 'AEFGT', profs: ['BERRADA', 'MEBSOUT', 'ASSOULI'], annee1: 'AEFGT101', annee2: 'AEFGT201' },
+  { filiere: 'CPA', profs: ['EDDAMIRI', 'MAAZOUZ'], annee1: 'CPA101', annee2: 'CPA201' },
+  { filiere: 'EB', profs: [], annee1: 'EB101', annee2: 'EB201' },
+  { filiere: 'EEI', profs: ['ELKHALIDY', 'ASSOULI', 'HANNANE'], annee1: 'EEI101', annee2: 'EEI201' },
+  { filiere: 'EM', profs: ['ESSFADI', 'BOUDABLIJ'], annee1: 'EM101', annee2: 'EM201' },
+  { filiere: 'ESA', profs: ['CHGORA', 'LOUARGUI', 'AZAROUAL', 'WAHOUB', 'ABOUTARIK', 'ZARIOH'], annee1: 'ESA101', annee2: 'ESA201' },
+  { filiere: 'M', profs: ['LAMALEM', 'ROUAGHI'], annee1: 'M101', annee2: 'M201' },
+  { filiere: 'MA', profs: ['BAHASSOUNE', 'ELAMIR'], annee1: 'MA101', annee2: 'MA200' },
+  { filiere: 'MOAB', profs: ['OUAKIF', 'KHANNIBA', 'MESSOUR'], annee1: 'MOAB100', annee2: 'MOAB201' },
+  { filiere: 'OPCM', profs: ['BIALA', 'ABOUTARA', 'FITHANE', 'HANAFI'], annee1: 'OPCM101', annee2: 'OPCM201' },
+  { filiere: 'PC', profs: ['DOUHOU', 'KHOUTAM'], annee1: 'PC101', annee2: 'PC201' },
+  { filiere: 'RVA', profs: ['RMILI', 'ELHARFI', 'CHAHID', 'CHAFIKI', 'ZOUBID'], annee1: 'RVA101', annee2: 'RVA201', cdsList: ['RVA100CDS'] },
+  { filiere: 'TCM', profs: ['NASRI', 'HANAFI'], annee1: 'TCM101', annee2: 'TCM201' },
+  { filiere: 'TEMI', profs: [], annee1: 'TEMI101', annee2: 'TEMI201', cdsList: ['TEMI100CDS', 'TEMI300CDS'] },
+  { filiere: 'TFM', profs: ['ABOUTARIK', 'BADDI'], annee1: 'TFM101', annee2: 'TFM201' },
+  { filiere: 'TREM', profs: ['ELABDANI', 'ELHARFI', 'CHAFIKI', 'ZOUBID', 'FITHANE'], annee1: 'TREM101', annee2: 'TREM201' }
 ]
 
 const DEFAULT_COMM_COLS = [
-  { module: 'Français', profs: ['BOUZADI', 'AOURAZENE', 'MESBAHI', 'KATMANE', 'JAOUAD', 'KHALDOUNI'] },
-  { module: 'Anglais', profs: ['GAOUGAOU', 'ELMOURABIT', 'RYABI', 'YAMKENE'] },
-  { module: 'Arabe', profs: ['ELOUARGUI', 'DEBBAR', 'NOUR'] },
-  { module: 'Soft Skills', profs: ['SIF', 'MESSOUDI'] },
-  { module: 'Culture Entreprise', profs: ['BEKRI'] },
-  { module: 'Culture Numérique', profs: ['ERRHAIMINI'] }
+  { module: 'Français' },
+  { module: 'Anglais' },
+  { module: 'Arabe' },
+  { module: 'Soft Skills' },
+  { module: 'Culture Entreprise' },
+  { module: 'Culture Numérique' }
 ]
+
+// Normalisation des chaînes pour comparaison insensible aux accents et à la casse
+function matchesModule(text: string | undefined, moduleName: string): boolean {
+  if (!text) return false
+  const t = text.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const m = moduleName.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return t === m || t.includes(m) || m.includes(t)
+}
+
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'] as const
 const TIMESLOTS = [
@@ -168,6 +184,11 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   // Search filter
   const [searchTerm, setSearchTerm] = useState('')
 
+  // Modal Affectation Formateurs Communication
+  const [commAssignModal, setCommAssignModal] = useState<{ module: string } | null>(null)
+  const [selectedProfToAssign, setSelectedProfToAssign] = useState<string>('')
+  const [isSavingAssign, setIsSavingAssign] = useState(false)
+
   // Modal Mise à jour date — Synchronisé automatiquement avec l'horloge du PC
   const [showDateModal, setShowDateModal] = useState(false)
   const [livePcTime, setLivePcTime] = useState<Date>(new Date())
@@ -220,6 +241,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
 
   // ── 1. Filières triées par ordre alphabétique (Alphabetical Order) ─────────
   const displayFilieresCols = useMemo(() => {
+    const isCds = (code: string) => /CDS/i.test(code)
+
     // If filieres exist in Firebase, sort alphabetically by code_filiere
     if (filieres && filieres.length > 0) {
       const sorted = [...filieres].sort((a, b) => a.code_filiere.localeCompare(b.code_filiere))
@@ -227,9 +250,15 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       return sorted.map(f => {
         const filiereCode = f.code_filiere.toUpperCase()
         
-        // Find all groups belonging to this filière
-        const fGroupes = groupes.filter(g => g.id_filiere === f.id || g.code_groupe.toUpperCase().startsWith(filiereCode))
-        const fGroupeCodes = new Set(fGroupes.map(g => g.code_groupe.toUpperCase()))
+        // Find all groups belonging to this filière using strict prefix / ID matching
+        const fGroupes = groupes.filter(g => {
+          if (g.id_filiere && g.id_filiere === f.id) return true
+          const gFil = (g.filiere || '').trim().toUpperCase()
+          if (gFil && (gFil === filiereCode || gFil === f.nom_filiere.toUpperCase())) return true
+          const regex = new RegExp(`^${filiereCode}(\\s*\\d|\\s*CDS|$)`, 'i')
+          return regex.test((g.code_groupe || '').trim().toUpperCase())
+        })
+        const fGroupeCodes = new Set(fGroupes.map(g => g.code_groupe.toUpperCase().replace(/\s+/g, '')))
 
         // Find formateurs assigned to groups of this filière from real DB
         const assignedProfs: string[] = []
@@ -237,7 +266,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
         if (formateurs && formateurs.length > 0) {
           formateurs.forEach(formateur => {
             const hasMatch = formateur.groupes_assignes?.some(gCode => {
-              const clean = gCode.toUpperCase().trim()
+              const clean = gCode.toUpperCase().replace(/\s+/g, '')
               return fGroupeCodes.has(clean) || clean.startsWith(filiereCode)
             })
             if (hasMatch) {
@@ -249,68 +278,117 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           })
         }
 
-        // Determine 1ère année and 2ème année codes
-        const annee1 = fGroupes.find(g => g.code_groupe.match(/1\d\d/))?.code_groupe.replace(/\s+/g, '') || `${filiereCode}100`
-        const annee2 = fGroupes.find(g => g.code_groupe.match(/2\d\d/))?.code_groupe.replace(/\s+/g, '') || `${filiereCode}200`
+        const dayGroups = fGroupes.filter(g => !isCds(g.code_groupe))
+        const cdsGroups = fGroupes.filter(g => isCds(g.code_groupe))
         const fallback = DEFAULT_FALLBACK_COLS.find(df => df.filiere.toUpperCase() === filiereCode)
-        const anneeExtra = fallback?.anneeExtra || ''
+
+        // Determine 1ère année and 2ème année codes from database (day groups)
+        const g1 = dayGroups.find(g => g.annee === 1 || g.code_groupe.match(/1\d\d/))
+        const annee1 = g1 ? g1.code_groupe.replace(/\s+/g, '') : (fallback?.annee1 || `${filiereCode}101`)
+
+        const g2 = dayGroups.find(g => g.annee === 2 || g.code_groupe.match(/2\d\d/))
+        const annee2 = g2 ? g2.code_groupe.replace(/\s+/g, '') : (fallback?.annee2 || `${filiereCode}201`)
+
+        // Dynamically extract all CDS groups for this filière from the database
+        const dbCdsList = Array.from(new Set(cdsGroups.map(g => g.code_groupe.replace(/\s+/g, '').toUpperCase())))
+        const fallbackCds = fallback?.cdsList || (fallback?.anneeExtra ? [fallback.anneeExtra] : [])
+        const cdsList = dbCdsList.length > 0 ? dbCdsList : fallbackCds
 
         return {
           filiere: f.code_filiere,
           profs: assignedProfs,
           annee1,
           annee2,
-          anneeExtra
+          anneeExtra: cdsList[0] || '',
+          cdsList
         }
       })
     }
 
-    // Fallback: If no filieres exist in DB, only show structure, profs empty if formateurs is empty
+    // Fallback: If no filieres exist in DB, only show structure from DEFAULT_FALLBACK_COLS
     return DEFAULT_FALLBACK_COLS
-      .map(col => ({
-        ...col,
-        profs: formateurs && formateurs.length > 0 ? col.profs : []
-      }))
+      .map(col => {
+        const filCode = col.filiere.toUpperCase()
+        const dbCds = groupes.filter(g => isCds(g.code_groupe) && g.code_groupe.toUpperCase().startsWith(filCode))
+        const cdsList = dbCds.length > 0
+          ? Array.from(new Set(dbCds.map(g => g.code_groupe.replace(/\s+/g, '').toUpperCase())))
+          : (col.cdsList || (col.anneeExtra ? [col.anneeExtra] : []))
+
+        return {
+          ...col,
+          cdsList,
+          profs: formateurs && formateurs.length > 0 ? col.profs : []
+        }
+      })
       .sort((a, b) => a.filiere.localeCompare(b.filiere))
   }, [filieres, formateurs, groupes])
 
   // ── 2. Communication Modules et Formateurs dynamiques ─────────────────────
   const displayCommCols = useMemo(() => {
     return DEFAULT_COMM_COLS.map(col => {
-      // Si aucun formateur dans la base (ou après suppression), colonnes vides
+      // Si aucun formateur dans la base, colonnes vides
       if (!formateurs || formateurs.length === 0) {
-        return { module: col.module, profs: [] }
+        return { module: col.module, profs: [], profObjs: [] }
       }
 
-      // Recherche uniquement parmi les formateurs réels présents dans la base
-      const matchingProfs = formateurs
-        .filter(f => {
-          const fn = (f.nom_prenom || f.nom || '').toUpperCase()
-          return col.profs.some(p => fn.includes(p.toUpperCase())) ||
-            f.groupes_assignes?.some(g => g.toUpperCase().includes(col.module.toUpperCase()))
-        })
-        .map(f => (f.nom || f.nom_prenom || '').toUpperCase())
+      // Recherche strictement parmi les formateurs réels présents dans la base
+      // basée sur matiere, specialite, ou groupes_assignes (AUCUN nom en dur)
+      const matchingProfs = formateurs.filter(f => {
+        if (matchesModule(f.matiere, col.module)) return true
+        if (matchesModule(f.specialite, col.module)) return true
+        if (f.groupes_assignes?.some(g => matchesModule(g, col.module))) return true
+        return false
+      })
 
       return {
         module: col.module,
-        profs: matchingProfs
+        profs: matchingProfs.map(f => (f.nom || f.nom_prenom || '').toUpperCase()),
+        profObjs: matchingProfs
       }
     })
   }, [formateurs])
 
   // ── Open Section Timetable ──────────────────────────────────────────────────
   async function openSectionTimetable(groupeCodeSample: string, filiereCode: string, anneeLabel: string) {
-    // Determine year digit: 1xx → année 1, 2xx → année 2
-    const yearDigit = groupeCodeSample.match(/([12])\d\d/)?.[1] || '1'
-
-    // Get all groups of same filiere & same year
+    const isCds = /CDS/i.test(groupeCodeSample) || /CDS/i.test(anneeLabel)
     const filCode = filiereCode.toUpperCase().replace(/\s+/g, '')
-    const sectionGroupes = groupes.filter(g => {
+
+    // Determine year digit: 1xx → 1, 2xx → 2, 3xx → 3, etc.
+    const yearMatch = groupeCodeSample.match(/([1-9])\d\d/)
+    const yearDigit = yearMatch ? yearMatch[1] : '1'
+
+    // Get all groups of same filiere & same year/section
+    let sectionGroupes = groupes.filter(g => {
       const code = g.code_groupe.toUpperCase().replace(/\s+/g, '')
+      const gIsCds = /CDS/i.test(code)
+      if (isCds !== gIsCds) return false
+
       const filObj = filieres.find(f => f.code_filiere.toUpperCase().replace(/\s+/g, '') === filCode)
-      return (code.startsWith(filCode) || (filObj && g.id_filiere === filObj.id)) &&
-        code.match(new RegExp(`${yearDigit}\\d\\d$`))
+      const belongs = (filObj && g.id_filiere === filObj.id) ||
+        new RegExp(`^${filCode}(\\s*\\d|\\s*CDS|$)`, 'i').test(code)
+      if (!belongs) return false
+
+      if (isCds) {
+        return code.includes(`${yearDigit}00`) || code.includes(`${yearDigit}01`) || code === groupeCodeSample.toUpperCase().replace(/\s+/g, '')
+      } else {
+        return code.match(new RegExp(`${yearDigit}\\d\\d`))
+      }
     }).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
+
+    // Fallback: If no groups in DB match yet, create a virtual group so the timetable opens gracefully
+    if (sectionGroupes.length === 0) {
+      sectionGroupes = [
+        {
+          id: groupeCodeSample,
+          code_groupe: groupeCodeSample,
+          nom_groupe: groupeCodeSample,
+          filiere: filiereCode,
+          annee: parseInt(yearDigit, 10) || 1,
+          effectif: 25,
+          createdAt: undefined as any
+        }
+      ]
+    }
 
     setSelectedSection({
       filiereCode,
@@ -2244,43 +2322,53 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   ))}
                 </tr>
 
-                {/* Annee Extra Row (e.g. CDS) - Clickable if exists */}
+                {/* Annee Extra Row (e.g. CDS - Cours du Soir) - Clickable sections */}
                 <tr style={{ background: '#ffffff', fontWeight: 800 }}>
-                  {displayFilieresCols.map((col, colIdx) => (
-                    <td
-                      key={colIdx}
-                      style={{
-                        padding: '4px',
-                        borderRight: colIdx < displayFilieresCols.length - 1 ? '1.5px solid #000' : 'none',
-                        fontSize: 11,
-                        color: '#475569'
-                      }}
-                    >
-                      {col.anneeExtra ? (
-                        <button
-                          type="button"
-                          onClick={() => openSectionTimetable(col.anneeExtra!, col.filiere, 'CDS')}
-                          style={{
-                            width: '100%',
-                            border: 'none',
-                            background: 'transparent',
-                            fontWeight: 800,
-                            fontSize: 11,
-                            color: '#7c3aed',
-                            cursor: 'pointer',
-                            padding: '2px 0',
-                            textDecoration: 'underline',
-                            transition: 'transform 0.1s'
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.06)' }}
-                          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
-                          title={`Voir le planning de la section ${col.anneeExtra}`}
-                        >
-                          {col.anneeExtra}
-                        </button>
-                      ) : ''}
-                    </td>
-                  ))}
+                  {displayFilieresCols.map((col, colIdx) => {
+                    const cds = col.cdsList || (col.anneeExtra ? [col.anneeExtra] : [])
+                    return (
+                      <td
+                        key={colIdx}
+                        style={{
+                          padding: '3px 2px',
+                          borderRight: colIdx < displayFilieresCols.length - 1 ? '1.5px solid #000' : 'none',
+                          fontSize: 11,
+                          color: '#475569',
+                          verticalAlign: 'middle'
+                        }}
+                      >
+                        {cds.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+                            {cds.map((cdsCode, cIdx) => (
+                              <button
+                                key={cIdx}
+                                type="button"
+                                onClick={() => openSectionTimetable(cdsCode, col.filiere, `CDS (${cdsCode})`)}
+                                style={{
+                                  width: '100%',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  fontWeight: 800,
+                                  fontSize: cds.length > 1 ? 10 : 11,
+                                  color: '#7c3aed',
+                                  cursor: 'pointer',
+                                  padding: '1px 0',
+                                  textDecoration: 'underline',
+                                  transition: 'transform 0.1s, color 0.1s',
+                                  whiteSpace: 'nowrap'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.color = '#5b21b6'; e.currentTarget.style.transform = 'scale(1.05)' }}
+                                onMouseLeave={(e) => { e.currentTarget.style.color = '#7c3aed'; e.currentTarget.style.transform = 'scale(1)' }}
+                                title={`Voir le planning de la section ${cdsCode}`}
+                              >
+                                {cdsCode}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </td>
+                    )
+                  })}
                 </tr>
               </tbody>
             </table>
@@ -2328,7 +2416,34 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                         fontSize: 13
                       }}
                     >
-                      {col.module}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                        <span>{col.module}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setCommAssignModal({ module: col.module })
+                            setSelectedProfToAssign('')
+                          }}
+                          style={{
+                            border: '1px solid #78350f',
+                            background: '#ffffff',
+                            color: '#78350f',
+                            borderRadius: 4,
+                            padding: '1px 5px',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 800,
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                          }}
+                          title={`Affecter des formateurs à ${col.module}`}
+                        >
+                          <Plus size={11} style={{ marginRight: 1 }} /> +
+                        </button>
+                      </div>
                     </th>
                   ))}
                 </tr>
@@ -2808,6 +2923,248 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Affectation Formateur Communication ───────────────────────── */}
+      {commAssignModal && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 1350 }}
+          onClick={() => {
+            if (!isSavingAssign) setCommAssignModal(null)
+          }}
+        >
+          <div
+            className="modal-content fade-in-up"
+            style={{
+              maxWidth: 540,
+              width: '92%',
+              background: '#ffffff',
+              borderRadius: 10,
+              border: '2px solid #000',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                background: '#f59e0b',
+                padding: '14px 20px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: '2px solid #000'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 20 }}>🎓</span>
+                <div>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: 16, color: '#000000', textTransform: 'uppercase' }}>
+                    Affectation des Formateurs
+                  </h3>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#78350f' }}>
+                    Matière : {commAssignModal.module}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCommAssignModal(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 22,
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  color: '#000000',
+                  lineHeight: 1
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              
+              {/* Section 1: Formateurs actuellement affectés */}
+              <div>
+                <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 800, color: '#1e293b' }}>
+                  Formateurs actuellement affectés à {commAssignModal.module} :
+                </h4>
+                {(() => {
+                  const assigned = formateurs.filter(f =>
+                    matchesModule(f.matiere, commAssignModal.module) ||
+                    matchesModule(f.specialite, commAssignModal.module) ||
+                    f.groupes_assignes?.some(g => matchesModule(g, commAssignModal.module))
+                  )
+
+                  if (assigned.length === 0) {
+                    return (
+                      <div style={{ padding: '12px 16px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 6, fontSize: 13, color: '#64748b', textAlign: 'center' }}>
+                        Aucun formateur n'est encore affecté à cette matière.
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
+                      {assigned.map(prof => (
+                        <div
+                          key={prof.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            background: '#eff6ff',
+                            border: '1.5px solid #bfdbfe',
+                            borderRadius: 6
+                          }}
+                        >
+                          <div>
+                            <span style={{ fontWeight: 900, fontSize: 13, color: '#1e3a8a' }}>
+                              {(prof.nom_prenom || `${prof.nom} ${prof.prenom || ''}`).toUpperCase()}
+                            </span>
+                            {prof.specialite && (
+                              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>
+                                ({prof.specialite})
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await formateursService.update(prof.id, { matiere: '' })
+                                setFormateurs(prev => prev.map(p => p.id === prof.id ? { ...p, matiere: '' } : p))
+                                toast.success(`${prof.nom} retiré de ${commAssignModal.module}`)
+                              } catch (e) {
+                                toast.error('Erreur lors de la suppression')
+                              }
+                            }}
+                            style={{
+                              border: '1px solid #ef4444',
+                              background: '#fee2e2',
+                              color: '#b91c1c',
+                              borderRadius: 4,
+                              padding: '4px 8px',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}
+                            title="Retirer ce formateur"
+                          >
+                            <Trash2 size={12} /> Retirer
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {/* Section 2: Ajouter un formateur */}
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+                <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 800, color: '#1e293b' }}>
+                  Affecter un nouveau formateur :
+                </h4>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <select
+                    value={selectedProfToAssign}
+                    onChange={(e) => setSelectedProfToAssign(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      border: '1.5px solid #000000',
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: '#ffffff'
+                    }}
+                  >
+                    <option value="">-- Choisir un formateur dans la base --</option>
+                    {formateurs
+                      .filter(f => !matchesModule(f.matiere, commAssignModal.module))
+                      .sort((a, b) => (a.nom_prenom || a.nom || '').localeCompare(b.nom_prenom || b.nom || ''))
+                      .map(f => (
+                        <option key={f.id} value={f.id}>
+                          {(f.nom_prenom || `${f.nom} ${f.prenom || ''}`).toUpperCase()} {f.specialite ? `[${f.specialite}]` : ''}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!selectedProfToAssign || isSavingAssign}
+                    onClick={async () => {
+                      if (!selectedProfToAssign) return
+                      setIsSavingAssign(true)
+                      try {
+                        await formateursService.update(selectedProfToAssign, { matiere: commAssignModal.module })
+                        setFormateurs(prev => prev.map(p => p.id === selectedProfToAssign ? { ...p, matiere: commAssignModal.module } : p))
+                        setSelectedProfToAssign('')
+                        toast.success(`Formateur affecté à ${commAssignModal.module} avec succès !`)
+                      } catch (e) {
+                        toast.error("Erreur lors de l'enregistrement")
+                      } finally {
+                        setIsSavingAssign(false)
+                      }
+                    }}
+                    style={{
+                      background: selectedProfToAssign ? '#16a34a' : '#94a3b8',
+                      color: '#ffffff',
+                      border: '1.5px solid #000000',
+                      borderRadius: 6,
+                      padding: '8px 16px',
+                      fontWeight: 800,
+                      fontSize: 13,
+                      cursor: selectedProfToAssign ? 'pointer' : 'not-allowed',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    <Check size={14} /> Affecter
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                padding: '12px 20px',
+                background: '#f8fafc',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                justifyContent: 'flex-end'
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setCommAssignModal(null)}
+                style={{
+                  padding: '7px 18px',
+                  background: '#ffffff',
+                  border: '1.5px solid #000000',
+                  borderRadius: 6,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer'
+                }}
+              >
+                Fermer
+              </button>
             </div>
           </div>
         </div>
