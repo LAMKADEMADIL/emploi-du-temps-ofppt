@@ -505,7 +505,18 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     const periodeApp = localStorage.getItem('periode_application_groupe') || 'Avril 2026'
 
     return (
-      <div className="fade-in-up" style={{ height: '100vh', overflowY: 'auto', overflowX: 'hidden', padding: '8px 16px 60px', background: '#eef2f7' }}>
+      <div
+        className="fade-in-up"
+        style={{
+          display: 'block',
+          height: '100%',
+          maxHeight: '100vh',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '8px 16px 60px',
+          background: '#eef2f7'
+        }}
+      >
 
         {/* ── Top bar ─────────────────────────── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -537,7 +548,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
             maxWidth: 1300,
             margin: '0 auto',
             color: '#000',
-            overflow: 'hidden'
+            overflow: 'visible'
           }}
         >
           {/* Header row: Logo + Title */}
@@ -582,7 +593,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
               <br />Chargement du planning de la section...
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
                 <thead>
                   {/* Row 1: HEURE header */}
@@ -689,7 +700,18 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
 
   if (selectedProfName) {
     return (
-      <div className="fade-in-up" style={{ height: '100vh', overflowY: 'auto', overflowX: 'hidden', padding: '8px 16px 50px', background: '#f8fafc' }}>
+      <div
+        className="fade-in-up"
+        style={{
+          display: 'block',
+          height: '100%',
+          maxHeight: '100vh',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '8px 16px 50px',
+          background: '#f8fafc'
+        }}
+      >
         {/* Top bar with back button & Print */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <button
@@ -732,7 +754,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
             padding: 24,
             maxWidth: 1250,
             margin: '0 auto',
-            color: '#000000'
+            color: '#000000',
+            overflow: 'visible'
           }}
         >
           {/* Header row: Logo, Titles, Sync Controls */}
@@ -857,7 +880,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           </div>
 
           {/* Weekly Timetable Grid Table */}
-          <div style={{ marginTop: 14, overflowX: 'auto' }}>
+          <div style={{ marginTop: 14, overflowX: 'auto', overflowY: 'visible' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000', fontSize: 13, textAlign: 'center' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '2px solid #000' }}>
@@ -1088,10 +1111,12 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     <div
       className="fade-in-up"
       style={{
-        padding: '12px 18px 80px',
-        height: '100vh',
+        display: 'block',
+        height: '100%',
+        maxHeight: '100vh',
         overflowY: 'auto',
-        overflowX: 'hidden'
+        overflowX: 'hidden',
+        padding: '12px 18px 80px'
       }}
     >
       {/* Top Banner / Header */}

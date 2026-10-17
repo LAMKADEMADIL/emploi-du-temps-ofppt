@@ -98,10 +98,10 @@ body {
 /* ============================
    SCROLLBAR
    ============================ */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-secondary); }
-::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #e2e8f0; }
+::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
 /* ============================
    APP LAYOUT
@@ -111,15 +111,6 @@ body {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-}
-
-/* Main content area - scrollable */
-.main-content {
-  flex: 1;
-  height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  min-width: 0;
 }
 
 /* ============================
@@ -378,11 +369,13 @@ body {
    ============================ */
 .main-content {
   flex: 1;
+  height: 100vh;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-primary);
-  min-height: 0;
 }
 
 .fade-in-up {
