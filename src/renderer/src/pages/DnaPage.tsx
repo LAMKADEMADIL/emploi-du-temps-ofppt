@@ -357,34 +357,6 @@ export default function DnaPage(): React.ReactElement {
               {lang === 'ar' ? 'تفريغ الجدول' : 'Vider le tableau'}
             </button>
           )}
-
-          {/* Import Excel DNA */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '11px 18px',
-              fontSize: '14px',
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              color: 'white',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
-              cursor: isImporting ? 'wait' : 'pointer',
-              transition: 'all 0.2s',
-              opacity: isImporting ? 0.7 : 1
-            }}
-            onMouseEnter={(e) => { if (!isImporting) e.currentTarget.style.transform = 'translateY(-1px)' }}
-            onMouseLeave={(e) => { if (!isImporting) e.currentTarget.style.transform = 'translateY(0)' }}
-          >
-            <FileSpreadsheet size={18} />
-            {isImporting ? (lang === 'ar' ? 'جاري الاستيراد...' : 'Importation...') : (lang === 'ar' ? 'استيراد ورقة DNA' : 'Importer DNA')}
-          </button>
         </div>
       </div>
 
