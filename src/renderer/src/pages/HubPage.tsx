@@ -121,16 +121,6 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     loading: boolean
   } | null>(null)
 
-  // Section Cell Edit Modal
-  const [sectionCellModal, setSectionCellModal] = useState<{
-    jour: string
-    groupe: Groupe
-    tsIdx: number
-    formateur: string
-    salle: string
-    module: string
-  } | null>(null)
-
   // Cell edit state
   const [editGroupe, setEditGroupe] = useState('')
   const [editModule, setEditModule] = useState('M')
@@ -385,75 +375,6 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       console.error(err)
       toast.error('Erreur lors du chargement du planning de la section')
       setSelectedSection(prev => prev ? { ...prev, loading: false } : null)
-    }
-  }
-
-  // ── Handle Save Section Cell (Synchronized with Planning Salles) ───────────
-  async function handleSaveSectionCell() {
-    if (!sectionCellModal || !selectedSection) return
-    const { jour, groupe, tsIdx, formateur, salle, module } = sectionCellModal
-    const jourUpper = jour.toUpperCase()
-    const salleUpper = salle.toUpperCase().trim()
-
-    try {
-      if (salleUpper) {
-        const planningKey = `${jourUpper}__${salleUpper}__${tsIdx}`
-        await planningSallesService.setCell({
-          key: planningKey,
-          formateurId: formateur.trim() || 'Formateur',
-          groupeId: groupe.code_groupe,
-          module: module.trim() || 'M'
-        })
-      }
-
-      const cellData = {
-        nomFormateur: formateur.toUpperCase().trim(),
-        nomSalle: salleUpper,
-        module: module.trim() || 'M'
-      }
-
-      setSelectedSection(prev => {
-        if (!prev) return null
-        const nextSched = { ...prev.schedule }
-        if (groupe.id) nextSched[`${jourUpper}__${groupe.id}__${tsIdx}`] = cellData
-        nextSched[`${jourUpper}__${groupe.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`] = cellData
-        return { ...prev, schedule: nextSched }
-      })
-
-      setSectionCellModal(null)
-      toast.success('✅ Séance enregistrée et synchronisée avec le Planning des Salles !')
-    } catch (e) {
-      console.error(e)
-      toast.error('Erreur lors de la sauvegarde de la séance')
-    }
-  }
-
-  // ── Handle Clear Section Cell ───────────────────────────────────────────────
-  async function handleClearSectionCell() {
-    if (!sectionCellModal || !selectedSection) return
-    const { jour, groupe, tsIdx, salle } = sectionCellModal
-    const jourUpper = jour.toUpperCase()
-    const salleUpper = salle.toUpperCase().trim()
-
-    try {
-      if (salleUpper) {
-        const planningKey = `${jourUpper}__${salleUpper}__${tsIdx}`
-        await planningSallesService.deleteCell(planningKey)
-      }
-
-      setSelectedSection(prev => {
-        if (!prev) return null
-        const nextSched = { ...prev.schedule }
-        if (groupe.id) delete nextSched[`${jourUpper}__${groupe.id}__${tsIdx}`]
-        delete nextSched[`${jourUpper}__${groupe.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`]
-        return { ...prev, schedule: nextSched }
-      })
-
-      setSectionCellModal(null)
-      toast.success('Séance vidée avec succès')
-    } catch (e) {
-      console.error(e)
-      toast.error('Erreur lors de la suppression')
     }
   }
 
@@ -1013,18 +934,11 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                               const cell = (keyWithId && selectedSection.schedule[keyWithId]) || selectedSection.schedule[keyWithCode]
 
                               // 1. If an actual session exists, ALWAYS show it!
+                              // 1. If an actual session exists, ALWAYS show it!
                               if (cell && (cell.nomFormateur || cell.nomSalle)) {
                                 return (
                                   <td
                                     key={tsIdx}
-                                    onClick={() => setSectionCellModal({
-                                      jour,
-                                      groupe,
-                                      tsIdx,
-                                      formateur: cell.nomFormateur,
-                                      salle: cell.nomSalle,
-                                      module: cell.module || 'M'
-                                    })}
                                     style={{
                                       border: '1.5px solid #000',
                                       textAlign: 'center',
@@ -1033,12 +947,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                       fontWeight: 800,
                                       color: '#7a1c00',
                                       background: '#ffccbc',
-                                      cursor: 'pointer',
-                                      transition: 'background 0.15s'
+                                      userSelect: 'none'
                                     }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.background = '#ffab91' }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.background = '#ffccbc' }}
-                                    title={`Séance: ${cell.nomFormateur} - ${cell.nomSalle} (Cliquer pour modifier)`}
                                   >
                                     {cell.nomFormateur} - {cell.nomSalle}
                                   </td>
@@ -1050,14 +960,6 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                 return (
                                   <td
                                     key={tsIdx}
-                                    onClick={() => setSectionCellModal({
-                                      jour,
-                                      groupe,
-                                      tsIdx,
-                                      formateur: '',
-                                      salle: '',
-                                      module: 'M'
-                                    })}
                                     style={{
                                       border: '1.5px solid #000',
                                       textAlign: 'center',
@@ -1067,9 +969,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                       color: '#92400e',
                                       background: '#fef3c7',
                                       padding: '6px 4px',
-                                      cursor: 'pointer'
+                                      userSelect: 'none'
                                     }}
-                                    title="En stage (Cliquer pour assigner une séance)"
                                   >
                                     Stage
                                   </td>
@@ -1080,24 +981,11 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                               return (
                                 <td
                                   key={tsIdx}
-                                  onClick={() => setSectionCellModal({
-                                    jour,
-                                    groupe,
-                                    tsIdx,
-                                    formateur: '',
-                                    salle: '',
-                                    module: 'M'
-                                  })}
                                   style={{
                                     border: '1px solid #bbb',
                                     background: '#fff',
-                                    padding: '6px 4px',
-                                    cursor: 'pointer',
-                                    transition: 'background 0.15s'
+                                    padding: '6px 4px'
                                   }}
-                                  onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9' }}
-                                  onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff' }}
-                                  title="Cliquer pour ajouter une séance"
                                 />
                               )
                             })}
@@ -1129,113 +1017,6 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
             <div style={{ fontWeight: 900, fontSize: 13 }}>Directeur du Complexe</div>
           </div>
         </div>
-
-        {/* Section Cell Edit Modal */}
-        {sectionCellModal && (
-          <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setSectionCellModal(null)}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460, padding: '24px 28px' }}>
-              <div className="modal-header" style={{ marginBottom: 16 }}>
-                <h3 className="modal-title" style={{ fontSize: 18, fontWeight: 800 }}>
-                  Modifier la séance ({sectionCellModal.jour} - {TS_LABELS[sectionCellModal.tsIdx]})
-                </h3>
-                <button className="modal-close" onClick={() => setSectionCellModal(null)}>×</button>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Groupe</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={sectionCellModal.groupe.code_groupe}
-                    disabled
-                    style={{ background: '#f1f5f9', fontWeight: 800 }}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Formateur</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Nom du formateur..."
-                    value={sectionCellModal.formateur}
-                    onChange={(e) => setSectionCellModal(prev => prev ? { ...prev, formateur: e.target.value.toUpperCase() } : null)}
-                    list="section-formateurs-list"
-                    autoFocus
-                  />
-                  <datalist id="section-formateurs-list">
-                    {formateurs.map(f => {
-                      const name = (f.nom || f.nom_prenom || '').toUpperCase()
-                      return <option key={f.id} value={name} />
-                    })}
-                  </datalist>
-                  {formateurs.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, maxHeight: 80, overflowY: 'auto' }}>
-                      {formateurs.slice(0, 10).map(f => {
-                        const name = (f.nom || f.nom_prenom || '').toUpperCase()
-                        return (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => setSectionCellModal(prev => prev ? { ...prev, formateur: name } : null)}
-                            style={{ padding: '2px 8px', fontSize: 11, background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer' }}
-                          >
-                            {name}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Salle / Atelier</label>
-                  <select
-                    className="form-select"
-                    value={sectionCellModal.salle}
-                    onChange={(e) => setSectionCellModal(prev => prev ? { ...prev, salle: e.target.value } : null)}
-                  >
-                    <option value="">-- Sans salle --</option>
-                    {salles.map(s => (
-                      <option key={s.id} value={s.nom_salle}>{s.nom_salle} ({s.type_salle})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Module</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Ex: M"
-                    value={sectionCellModal.module}
-                    onChange={(e) => setSectionCellModal(prev => prev ? { ...prev, module: e.target.value } : null)}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={handleClearSectionCell}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px' }}
-                >
-                  <Trash2 size={16} /> Vider
-                </button>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setSectionCellModal(null)}>
-                    Annuler
-                  </button>
-                  <button type="button" className="btn btn-primary" onClick={handleSaveSectionCell}>
-                    Enregistrer
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     )
   }
