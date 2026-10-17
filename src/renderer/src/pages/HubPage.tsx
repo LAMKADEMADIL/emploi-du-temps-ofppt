@@ -78,6 +78,11 @@ interface FormateurSlot {
   salle: string
   syncedSalle?: boolean
   syncedGroupe?: boolean
+  conflit?: {
+    salle: string
+    occupant: string
+    message: string
+  }
 }
 
 type ScheduleMap = Record<string, FormateurSlot>
@@ -93,6 +98,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   const [salles, setSalles] = useState<Salle[]>([])
   const [groupes, setGroupes] = useState<Groupe[]>([])
   const [filieres, setFilieres] = useState<Filiere[]>([])
+  const [planningSallesMap, setPlanningSallesMap] = useState<Record<string, any>>({})
   
   // Selection - Formateur
   const [selectedProfName, setSelectedProfName] = useState<string | null>(null)
@@ -101,6 +107,15 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   const [statut, setStatut] = useState<'statutaire' | 'cooperant' | 'vacataire' | 'contrat'>('statutaire')
   const [activeCellKey, setActiveCellKey] = useState<string | null>(null)
   const [cellEditModal, setCellEditModal] = useState<{ day: string; slotIdx: number } | null>(null)
+
+  // ── Conflit de Salle Modal (style Excel / OFPPT officiel) ───────────────
+  const [conflitModal, setConflitModal] = useState<{
+    salle: string
+    occupant: string
+    day: string
+    timeLabel: string
+    message: string
+  } | null>(null)
 
   // ── Confirmation Modal (centre de l'écran) ─────────────────────────────
   const [confirmModal, setConfirmModal] = useState<{
@@ -143,16 +158,18 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   async function loadBaseData() {
     try {
       setLoading(true)
-      const [f, s, g, fil] = await Promise.all([
+      const [f, s, g, fil, ps] = await Promise.all([
         formateursService.getAll(),
         sallesService.getAll(),
         groupesService.getAll(),
-        filieresService.getAll()
+        filieresService.getAll(),
+        planningSallesService.getAll().catch(() => ({} as Record<string, any>))
       ])
       setFormateurs(f)
       setSalles(s)
       setGroupes(g)
       setFilieres(fil)
+      setPlanningSallesMap(ps || {})
     } catch (err) {
       console.error(err)
       toast.error('Erreur de chargement des données')
@@ -378,37 +395,137 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     }
   }
 
+  // ── Helper functions for Room Conflict Detection ──────────────────────────
+  function getOccupantLabel(cell: { formateurId?: string; groupeId?: string }): string {
+    if (!cell) return ''
+    const rawF = String(cell.formateurId || '').trim()
+    const rawG = String(cell.groupeId || '').trim()
+
+    // Find formateur
+    const fObj = formateurs.find(f => 
+      f.id === rawF ||
+      (f.nom_prenom || '').toUpperCase() === rawF.toUpperCase() ||
+      (f.nom || '').toUpperCase() === rawF.toUpperCase() ||
+      (f.nom_prenom || '').toUpperCase().includes(rawF.toUpperCase())
+    )
+    const fName = fObj
+      ? (fObj.nom && fObj.prenom ? `${fObj.nom} ${fObj.prenom}` : (fObj.nom_prenom || fObj.nom || rawF)).toUpperCase()
+      : rawF.toUpperCase()
+
+    // Find groupe
+    const gObj = groupes.find(g => 
+      g.id === rawG ||
+      g.code_groupe.toUpperCase().replace(/\s+/g, '') === rawG.toUpperCase().replace(/\s+/g, '')
+    )
+    const gCode = gObj ? gObj.code_groupe : rawG
+
+    if (fName && gCode) return `${fName} - ${gCode}`
+    return fName || gCode || 'Occupé'
+  }
+
+  function isSameFormateur(occupantFormateurId: string, profName: string): boolean {
+    if (!occupantFormateurId || !profName) return false
+    const occ = occupantFormateurId.trim().toUpperCase()
+    const current = profName.trim().toUpperCase()
+
+    if (occ === current) return true
+
+    const profObj = formateurs.find(f => 
+      (f.nom_prenom || '').toUpperCase().includes(current) ||
+      (f.nom || '').toUpperCase().includes(current) ||
+      current.includes((f.nom_prenom || '').toUpperCase())
+    )
+
+    if (profObj) {
+      if (profObj.id && profObj.id.toUpperCase() === occ) return true
+      if ((profObj.nom_prenom || '').toUpperCase() === occ) return true
+      if ((profObj.nom || '').toUpperCase() === occ) return true
+      if (profObj.nom && profObj.prenom && `${profObj.nom} ${profObj.prenom}`.toUpperCase() === occ) return true
+    }
+
+    return false
+  }
+
+  function isSalleOccupiedByOther(day: string, slotIdx: number, salleName: string): boolean {
+    if (!salleName || !salleName.trim() || !selectedProfName) return false
+    const planningKey = `${day.toUpperCase()}__${salleName.trim().toUpperCase()}__${slotIdx}`
+    const cell = planningSallesMap[planningKey]
+    if (!cell) return false
+    return !isSameFormateur(cell.formateurId, selectedProfName)
+  }
+
+  function getOccupantLabelFor(day: string, slotIdx: number, salleName: string): string {
+    if (!salleName || !salleName.trim()) return ''
+    const planningKey = `${day.toUpperCase()}__${salleName.trim().toUpperCase()}__${slotIdx}`
+    const cell = planningSallesMap[planningKey]
+    return cell ? getOccupantLabel(cell) : ''
+  }
+
   // Load schedule for a formateur (from localStorage or firebase planning)
   async function openFormateurSchedule(profName: string, filiereCode: string) {
     setSelectedProfName(profName)
     setSelectedProfFiliere(filiereCode)
-    
+
+    let planningMap: Record<string, any> = planningSallesMap
+    try {
+      planningMap = await planningSallesService.getAll()
+      setPlanningSallesMap(planningMap)
+    } catch (e) {
+      // ignore
+    }
+
     // Check localStorage cache first
     const cacheKey = `edt_prof_${profName.replace(/\s+/g, '_').toUpperCase()}`
     const cached = localStorage.getItem(cacheKey)
+    let loadedSchedule: ScheduleMap = {}
+
     if (cached) {
       try {
-        setProfSchedule(JSON.parse(cached))
-        return
+        loadedSchedule = JSON.parse(cached)
       } catch (e) {
-        // fallback
+        loadedSchedule = {}
+      }
+    } else {
+      // Default sample data for demo if not found
+      loadedSchedule = {
+        'Lundi_0': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
+        'Lundi_1': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
+        'Lundi_2': { groupe: `${filiereCode}201`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
+        'Lundi_3': { groupe: `${filiereCode}201`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
+        'Mardi_0': { groupe: `${filiereCode}202`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
+        'Mardi_1': { groupe: `${filiereCode}202`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
+        'Mercredi_0': { groupe: `${filiereCode}201`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
+        'Mercredi_1': { groupe: `${filiereCode}202`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
+        'Jeudi_0': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
+        'Jeudi_1': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true }
       }
     }
 
-    // Default sample data for demo if not found
-    const defaultData: ScheduleMap = {
-      'Lundi_0': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-      'Lundi_1': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-      'Lundi_2': { groupe: `${filiereCode}201`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-      'Lundi_3': { groupe: `${filiereCode}201`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-      'Mardi_0': { groupe: `${filiereCode}202`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-      'Mardi_1': { groupe: `${filiereCode}202`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-      'Mercredi_0': { groupe: `${filiereCode}201`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-      'Mercredi_1': { groupe: `${filiereCode}202`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-      'Jeudi_0': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true },
-      'Jeudi_1': { groupe: `${filiereCode}101`, module: 'M', salle: `AT ${filiereCode}`, syncedSalle: true, syncedGroupe: true }
+    // Check conflicts for existing slots
+    for (const [key, slot] of Object.entries(loadedSchedule)) {
+      if (slot && slot.salle && slot.salle.trim()) {
+        const [day, slotIdxStr] = key.split('_')
+        const slotIdx = parseInt(slotIdxStr, 10)
+        const planningKey = `${day.toUpperCase()}__${slot.salle.trim().toUpperCase()}__${slotIdx}`
+        const cell = planningMap[planningKey]
+
+        if (cell && !isSameFormateur(cell.formateurId, profName)) {
+          const occLabel = getOccupantLabel(cell)
+          const timeLabel = TIMESLOTS[slotIdx] ? TIMESLOTS[slotIdx].label : ''
+          slot.conflit = {
+            salle: slot.salle,
+            occupant: occLabel,
+            message: lang === 'ar'
+              ? `تعارض ! القاعة '${slot.salle}' محجوزة بالفعل من طرف '${occLabel}' يوم ${day} توقيت ${timeLabel}.`
+              : `Conflit ! La salle '${slot.salle}' est déjà occupée par '${occLabel}' le ${day} à ${timeLabel} .`
+          }
+        } else {
+          delete slot.conflit
+        }
+      }
     }
-    setProfSchedule(defaultData)
+
+    setProfSchedule(loadedSchedule)
   }
 
   function saveSchedule(updated: ScheduleMap) {
@@ -430,49 +547,105 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     setCellEditModal({ day, slotIdx })
   }
 
-  // Apply cell edit
+  // Apply cell edit with room conflict check
   async function handleSaveCell() {
     if (!cellEditModal) return
     const key = `${cellEditModal.day}_${cellEditModal.slotIdx}`
     const existing = profSchedule[key] || { syncedSalle: true, syncedGroupe: true }
 
-    const updated = {
+    const dayUpper = cellEditModal.day.toUpperCase()
+    const salleUpper = (editSalle || '').trim().toUpperCase()
+    const timeLabel = TIMESLOTS[cellEditModal.slotIdx]?.label || ''
+
+    // Refresh latest planning_salles to detect conflict accurately
+    let currentPlanning = planningSallesMap
+    try {
+      currentPlanning = await planningSallesService.getAll()
+      setPlanningSallesMap(currentPlanning)
+    } catch (e) {
+      // fallback to existing
+    }
+
+    let detectedConflict: { salle: string; occupant: string; message: string } | null = null
+
+    if (salleUpper && selectedProfName) {
+      const planningKey = `${dayUpper}__${salleUpper}__${cellEditModal.slotIdx}`
+      const existingPlanningCell = currentPlanning[planningKey]
+
+      if (existingPlanningCell && !isSameFormateur(existingPlanningCell.formateurId, selectedProfName)) {
+        const occLabel = getOccupantLabel(existingPlanningCell)
+        const conflictMsg = lang === 'ar'
+          ? `تعارض ! القاعة '${editSalle}' محجوزة بالفعل من طرف '${occLabel}' يوم ${cellEditModal.day} توقيت ${timeLabel}.`
+          : `Conflit ! La salle '${editSalle}' est déjà occupée par '${occLabel}' le ${cellEditModal.day} à ${timeLabel} .`
+
+        detectedConflict = {
+          salle: editSalle,
+          occupant: occLabel,
+          message: conflictMsg
+        }
+      }
+    }
+
+    const updated: ScheduleMap = {
       ...profSchedule,
       [key]: {
         ...existing,
         groupe: editGroupe,
         module: editModule,
-        salle: editSalle
+        salle: editSalle,
+        conflit: detectedConflict || undefined
       }
     }
     saveSchedule(updated)
     setCellEditModal(null)
-    toast.success('Séance enregistrée !')
 
-    // Automatically sync to planningSalles if salle is filled
-    if (editSalle && selectedProfName) {
-      try {
-        const planningKey = `${cellEditModal.day.toUpperCase()}__${editSalle}__${cellEditModal.slotIdx}`
-        const profObj = formateurs.find(f => 
-          (f.nom_prenom || '').toUpperCase().includes(selectedProfName.toUpperCase()) ||
-          (f.nom || '').toUpperCase().includes(selectedProfName.toUpperCase()) ||
-          selectedProfName.toUpperCase().includes((f.nom_prenom || '').toUpperCase())
-        )
-        const formateurIdToSave = profObj?.id || selectedProfName
+    if (detectedConflict) {
+      // Show conflict popup modal matching Excel
+      setConflitModal({
+        salle: detectedConflict.salle,
+        occupant: detectedConflict.occupant,
+        day: cellEditModal.day,
+        timeLabel,
+        message: detectedConflict.message
+      })
+      toast.error(detectedConflict.message, { duration: 6000 })
+    } else {
+      toast.success(lang === 'ar' ? '✅ تم حفظ الحصة بنجاح !' : 'Séance enregistrée !')
 
-        const grpObj = groupes.find(g => 
-          g.code_groupe.toUpperCase().replace(/\s+/g, '') === editGroupe.toUpperCase().replace(/\s+/g, '')
-        )
-        const groupeIdToSave = grpObj?.id || editGroupe || 'Groupe'
+      // Automatically sync to planningSalles ONLY if no conflict
+      if (editSalle && selectedProfName) {
+        try {
+          const planningKey = `${dayUpper}__${salleUpper}__${cellEditModal.slotIdx}`
+          const profObj = formateurs.find(f => 
+            (f.nom_prenom || '').toUpperCase().includes(selectedProfName.toUpperCase()) ||
+            (f.nom || '').toUpperCase().includes(selectedProfName.toUpperCase()) ||
+            selectedProfName.toUpperCase().includes((f.nom_prenom || '').toUpperCase())
+          )
+          const formateurIdToSave = profObj?.id || selectedProfName
 
-        await planningSallesService.setCell({
-          key: planningKey,
-          formateurId: formateurIdToSave,
-          groupeId: groupeIdToSave,
-          module: editModule || 'M'
-        })
-      } catch (e) {
-        console.error(e)
+          const grpObj = groupes.find(g => 
+            g.code_groupe.toUpperCase().replace(/\s+/g, '') === editGroupe.toUpperCase().replace(/\s+/g, '')
+          )
+          const groupeIdToSave = grpObj?.id || editGroupe || 'Groupe'
+
+          await planningSallesService.setCell({
+            key: planningKey,
+            formateurId: formateurIdToSave,
+            groupeId: groupeIdToSave,
+            module: editModule || 'M'
+          })
+          setPlanningSallesMap(prev => ({
+            ...prev,
+            [planningKey]: {
+              key: planningKey,
+              formateurId: formateurIdToSave,
+              groupeId: groupeIdToSave,
+              module: editModule || 'M'
+            }
+          }))
+        } catch (e) {
+          console.error(e)
+        }
       }
     }
   }
@@ -1298,6 +1471,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                         </td>
                         {TIMESLOTS.map((_, slotIdx) => {
                           const slot = profSchedule[`${day}_${slotIdx}`]
+                          const hasConflict = !!slot?.conflit
                           return (
                             <td
                               key={slotIdx}
@@ -1305,13 +1479,24 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                               style={{
                                 borderRight: slotIdx < 3 ? '1.5px solid #000' : 'none',
                                 padding: '4px',
-                                fontWeight: 800,
-                                color: slot?.salle ? '#1d4ed8' : '#94a3b8',
+                                fontWeight: hasConflict ? 900 : 800,
+                                color: hasConflict ? '#ffffff' : (slot?.salle ? '#1d4ed8' : '#94a3b8'),
                                 cursor: 'pointer',
-                                background: slot?.salle ? '#eff6ff' : 'transparent'
+                                background: hasConflict ? '#dc2626' : (slot?.salle ? '#eff6ff' : 'transparent'),
+                                textAlign: 'center',
+                                transition: 'all 0.15s ease',
+                                position: 'relative'
                               }}
+                              title={hasConflict ? slot?.conflit?.message : (slot?.salle ? `Salle: ${slot.salle} (Cliquer pour modifier)` : 'Cliquer pour assigner une salle')}
                             >
-                              {slot?.salle || '-'}
+                              {hasConflict ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                  <span>⚠️</span>
+                                  <span>{slot?.salle}</span>
+                                </span>
+                              ) : (
+                                slot?.salle || '-'
+                              )}
                             </td>
                           )
                         })}
@@ -1419,12 +1604,45 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                     className="form-select"
                     value={editSalle}
                     onChange={(e) => setEditSalle(e.target.value)}
+                    style={editSalle && isSalleOccupiedByOther(cellEditModal.day, cellEditModal.slotIdx, editSalle) ? {
+                      borderColor: '#dc2626',
+                      background: '#fef2f2',
+                      color: '#991b1b',
+                      fontWeight: 700
+                    } : {}}
                   >
                     <option value="">-- Sans salle --</option>
-                    {salles.map(s => (
-                      <option key={s.id} value={s.nom_salle}>{s.nom_salle} ({s.type_salle})</option>
-                    ))}
+                    {salles.map(s => {
+                      const isOccupied = isSalleOccupiedByOther(cellEditModal.day, cellEditModal.slotIdx, s.nom_salle)
+                      return (
+                        <option key={s.id} value={s.nom_salle}>
+                          {s.nom_salle} ({s.type_salle}){isOccupied ? ' ⚠️ [Occupée]' : ''}
+                        </option>
+                      )
+                    })}
                   </select>
+                  {editSalle && isSalleOccupiedByOther(cellEditModal.day, cellEditModal.slotIdx, editSalle) && (
+                    <div style={{
+                      marginTop: 6,
+                      padding: '8px 12px',
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      color: '#b91c1c',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}>
+                      <span>⚠️</span>
+                      <span>
+                        {lang === 'ar'
+                          ? `تنبيه: هذه القاعة محجوزة بالفعل من طرف ${getOccupantLabelFor(cellEditModal.day, cellEditModal.slotIdx, editSalle)} !`
+                          : `Attention : cette salle est déjà occupée par ${getOccupantLabelFor(cellEditModal.day, cellEditModal.slotIdx, editSalle)} !`}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1569,6 +1787,139 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)' }}
                 >
                   {confirmModal.confirmLabel}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Conflit de Salle Modal (style Excel / OFPPT officiel) ──────────── */}
+        {conflitModal && (
+          <div
+            onClick={() => setConflitModal(null)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 3000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(15, 23, 42, 0.6)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              animation: 'fadeIn 0.15s ease'
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: '#ffffff',
+                borderRadius: 14,
+                boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0,0,0,0.08)',
+                width: 490,
+                maxWidth: '92vw',
+                padding: '26px 30px',
+                border: '1.5px solid #fecaca',
+                animation: 'slideUp 0.2s ease'
+              }}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 12,
+                    background: '#fef2f2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 26,
+                    border: '1.5px solid #fee2e2',
+                    flexShrink: 0
+                  }}>
+                    ⚠️
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 18, fontWeight: 900, color: '#991b1b', margin: 0, lineHeight: 1.3 }}>
+                      {lang === 'ar' ? 'تعارض في القاعة' : 'Conflit de salle'}
+                    </h3>
+                    <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 3 }}>
+                      {lang === 'ar' ? 'تنبيه انشغال القاعة في Planning des Salles' : 'Alerte d\'occupation Planning des Salles'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConflitModal(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: 24,
+                    lineHeight: '20px',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    padding: 4
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Message Banner matching Excel message */}
+              <div style={{
+                background: '#fff1f2',
+                border: '1.5px solid #fecdd3',
+                borderRadius: 10,
+                padding: '16px 18px',
+                color: '#881337',
+                fontSize: 14,
+                lineHeight: 1.7,
+                fontWeight: 600,
+                marginBottom: 20,
+                direction: lang === 'ar' ? 'rtl' : 'ltr'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <span style={{ fontSize: 18, flexShrink: 0 }}>⚠️</span>
+                  <div>
+                    {conflitModal.message}
+                  </div>
+                </div>
+              </div>
+
+              <p style={{
+                fontSize: 12.5,
+                color: '#64748b',
+                lineHeight: 1.5,
+                margin: '0 0 22px',
+                direction: lang === 'ar' ? 'rtl' : 'ltr'
+              }}>
+                {lang === 'ar'
+                  ? 'تم تلوين هذه القاعة في الجدول باللون الأحمر لتنبيهك. يمكنك النقر عليها لتغيير القاعة أو تعديل الحصة.'
+                  : 'Cette salle a été marquée en rouge dans le tableau. Vous pouvez cliquer dessus à tout moment pour la modifier.'}
+              </p>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setConflitModal(null)}
+                  style={{
+                    padding: '9px 28px',
+                    fontSize: 13.5,
+                    fontWeight: 800,
+                    background: '#dc2626',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    boxShadow: '0 3px 10px rgba(220, 38, 38, 0.4)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#b91c1c' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#dc2626' }}
+                >
+                  {lang === 'ar' ? 'حسناً (OK)' : 'OK'}
                 </button>
               </div>
             </div>
