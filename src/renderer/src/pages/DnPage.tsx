@@ -406,37 +406,8 @@ export default function DnPage(): React.ReactElement {
             </div>
           </div>
         </div>
-
-        {/* Action Buttons: Only Excel Import */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 18px',
-              fontSize: '13.5px',
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              color: 'white',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
-              cursor: isImporting ? 'wait' : 'pointer',
-              transition: 'all 0.2s',
-              opacity: isImporting ? 0.7 : 1
-            }}
-          >
-            <FileSpreadsheet size={17} />
-            {isImporting
-              ? (lang === 'ar' ? 'جاري المزامنة...' : 'Synchronisation...')
-              : (lang === 'ar' ? 'استيراد ورقة DN' : 'Importer la feuille DN')}
-          </button>
-        </div>
       </div>
+
 
       {/* Page Body */}
       <div className="page-body">
