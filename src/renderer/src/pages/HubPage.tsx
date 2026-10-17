@@ -698,30 +698,38 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     })
   }
 
-  // ── Vider cellule groupe (avec confirmation modale) ──────────────────────
-  function executeViderCelluleGroupe() {
+  // ── Vider cellule groupe (avec confirmation modale identique à Sychron Salle) ──
+  async function executeViderCelluleGroupe() {
     if (!selectedProfName) return
-    const updated: ScheduleMap = {}
-    let count = 0
-    for (const [key, slot] of Object.entries(profSchedule)) {
-      if (slot.groupe && slot.groupe !== '-') count++
-      updated[key] = { ...slot, groupe: '' }
+    const toastId = toast.loading(lang === 'ar' ? 'جاري إخلاء المجموعات وحفظ التغييرات...' : 'Effacement des groupes en cours...')
+    try {
+      const updated: ScheduleMap = {}
+      let count = 0
+      for (const [key, slot] of Object.entries(profSchedule)) {
+        if (slot.groupe && slot.groupe.trim() && slot.groupe !== '-') count++
+        updated[key] = { ...slot, groupe: '' }
+      }
+      saveSchedule(updated)
+      toast.dismiss(toastId)
+      toast.success(
+        lang === 'ar'
+          ? `✅ تم إخلاء ${count} فوج وحفظ التعديلات بنجاح !`
+          : `✅ Les groupes (${count}) ont été vidés et enregistrés avec succès !`,
+        { duration: 4000 }
+      )
+    } catch (e) {
+      console.error(e)
+      toast.dismiss(toastId)
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء إخلاء المجموعات' : 'Erreur lors de l\'effacement des groupes')
     }
-    saveSchedule(updated)
-    toast.success(
-      lang === 'ar'
-        ? `✅ تم إخلاء الأفواج (${count}) من جدول الحصص بنجاح`
-        : `✅ Les groupes (${count}) ont été vidés de l'emploi du temps`,
-      { duration: 4000 }
-    )
   }
 
   function handleViderCelluleGroupe() {
     if (!selectedProfName) return
-    const count = Object.values(profSchedule).filter(s => s.groupe && s.groupe !== '-').length
+    const count = Object.values(profSchedule).filter(s => s.groupe && s.groupe.trim() && s.groupe !== '-').length
     if (count === 0) {
       toast(
-        lang === 'ar' ? 'لا توجد مجموعات لإخلائها' : 'Aucun groupe à vider',
+        lang === 'ar' ? 'لا توجد مجموعات لإخلائها حالياً' : 'Aucun groupe à vider dans ce tableau',
         { icon: 'ℹ️' }
       )
       return
@@ -729,11 +737,11 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     setConfirmModal({
       title: lang === 'ar' ? 'تأكيد إخلاء المجموعات' : 'Confirmer l\'effacement des groupes',
       message: lang === 'ar'
-        ? `هل تريد مسح وإخلاء ${count} فوج من جدول الأستاذ "${selectedProfName}" ؟`
-        : `Voulez-vous vider les ${count} groupe(s) de l'emploi du temps de « ${selectedProfName} » ?`,
-      icon: '⚠️',
-      confirmLabel: lang === 'ar' ? 'تأكيد الإخلاء' : 'Confirmer l\'effacement',
-      confirmColor: '#dc2626',
+        ? `هل تريد تأكيد مسح وإخلاء ${count} فوج من جدول الأستاذ "${selectedProfName}" وحفظ التعديل ؟`
+        : `Voulez-vous synchroniser et vider les ${count} groupe(s) de l'emploi du temps de « ${selectedProfName} » ?`,
+      icon: '🔄',
+      confirmLabel: lang === 'ar' ? 'تأكيد وحفظ' : 'Confirmer & Enregistrer',
+      confirmColor: '#2563eb',
       onConfirm: executeViderCelluleGroupe
     })
   }
