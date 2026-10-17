@@ -933,8 +933,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                               const keyWithCode = `${jourUpper}__${groupe.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`
                               const cell = (keyWithId && selectedSection.schedule[keyWithId]) || selectedSection.schedule[keyWithCode]
 
-                              // 1. If an actual session exists, ALWAYS show it!
-                              // 1. If an actual session exists, ALWAYS show it!
+                              // 1. If an actual session exists, ALWAYS show it (Nuance de gris officiel)
                               if (cell && (cell.nomFormateur || cell.nomSalle)) {
                                 return (
                                   <td
@@ -945,8 +944,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                       fontSize: 11,
                                       padding: '6px 4px',
                                       fontWeight: 800,
-                                      color: '#7a1c00',
-                                      background: '#ffccbc',
+                                      color: '#0f172a',
+                                      background: '#e2e8f0',
                                       userSelect: 'none'
                                     }}
                                   >
@@ -955,7 +954,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                 )
                               }
 
-                              // 2. If group is in stage, show "Stage"
+                              // 2. If group is in stage, show "Stage" (Gris clair sobre)
                               if (isEnStage) {
                                 return (
                                   <td
@@ -966,8 +965,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                       fontSize: 11,
                                       fontStyle: 'italic',
                                       fontWeight: 700,
-                                      color: '#92400e',
-                                      background: '#fef3c7',
+                                      color: '#475569',
+                                      background: '#f1f5f9',
                                       padding: '6px 4px',
                                       userSelect: 'none'
                                     }}
