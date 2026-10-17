@@ -85,6 +85,30 @@ interface FormateurSlot {
   }
 }
 
+// ── Helpers: Calcul automatique des dates depuis l'horloge du PC ─────────────
+const MOIS_FR = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+]
+
+function pcAnneeFormation(d: Date = new Date()): string {
+  const m = d.getMonth() + 1
+  const y = d.getFullYear()
+  return m >= 9 ? `${y}-${y + 1}` : `${y - 1}-${y}`
+}
+
+function pcPeriodeGroupe(d: Date = new Date()): string {
+  return `${MOIS_FR[d.getMonth()]} ${d.getFullYear()}`
+}
+
+function pcPeriodeFormateur(d: Date = new Date()): string {
+  const mois = MOIS_FR[d.getMonth()]
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  return `${mois} (${day}/${month}/${d.getFullYear()})`
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 type ScheduleMap = Record<string, FormateurSlot>
 
 interface HubPageProps {
@@ -144,12 +168,28 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   // Search filter
   const [searchTerm, setSearchTerm] = useState('')
 
-  // Modal Mise à jour date state (Image 1)
+  // Modal Mise à jour date — Synchronisé automatiquement avec l'horloge du PC
   const [showDateModal, setShowDateModal] = useState(false)
-  const [anneeGroupe, setAnneeGroupe] = useState('2025-2026')
-  const [periodeGroupe, setPeriodeGroupe] = useState('Avril 2026')
-  const [anneeFormateur, setAnneeFormateur] = useState('2025-2026')
-  const [periodeFormateur, setPeriodeFormateur] = useState('Avril (01/04/2026)')
+  const [livePcTime, setLivePcTime] = useState<Date>(new Date())
+  const [anneeGroupe, setAnneeGroupe] = useState<string>(() =>
+    localStorage.getItem('annee_formation_groupe') || pcAnneeFormation()
+  )
+  const [periodeGroupe, setPeriodeGroupe] = useState<string>(() =>
+    localStorage.getItem('periode_application_groupe') || pcPeriodeGroupe()
+  )
+  const [anneeFormateur, setAnneeFormateur] = useState<string>(() =>
+    localStorage.getItem('annee_formation_formateur') || pcAnneeFormation()
+  )
+  const [periodeFormateur, setPeriodeFormateur] = useState<string>(() =>
+    localStorage.getItem('periode_application_formateur') || pcPeriodeFormateur()
+  )
+
+  // Horloge en direct : mise à jour chaque seconde quand la modal est ouverte
+  useEffect(() => {
+    if (!showDateModal) return
+    const timer = setInterval(() => setLivePcTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [showDateModal])
 
   useEffect(() => {
     loadBaseData()
@@ -2551,22 +2591,68 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                 borderBottom: '1px solid #e2e8f0'
               }}
             >
-              <span style={{ fontWeight: 700, fontSize: 14 }}>Mise a jour date</span>
-              <button
-                type="button"
-                onClick={() => setShowDateModal(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: 20,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  color: '#64748b'
-                }}
-              >
-                ×
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Mise a jour date</span>
+                {/* Horloge en temps réel du PC */}
+                <span style={{
+                  background: '#0f172a',
+                  color: '#22d3ee',
+                  fontFamily: 'monospace',
+                  fontWeight: 800,
+                  fontSize: 13,
+                  padding: '3px 10px',
+                  borderRadius: 6,
+                  letterSpacing: 1.5
+                }}>
+                  🕐 {livePcTime.toLocaleTimeString('fr-FR')} — {livePcTime.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {/* Bouton synchronisation automatique depuis le PC */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const now = new Date()
+                    setAnneeGroupe(pcAnneeFormation(now))
+                    setPeriodeGroupe(pcPeriodeGroupe(now))
+                    setAnneeFormateur(pcAnneeFormation(now))
+                    setPeriodeFormateur(pcPeriodeFormateur(now))
+                    toast.success('🕐 Dates synchronisées depuis l\'horloge du PC !', { duration: 2500 })
+                  }}
+                  style={{
+                    background: '#0ea5e9',
+                    border: '1.5px solid #0284c7',
+                    borderRadius: 6,
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: 12,
+                    padding: '5px 12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#0284c7' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#0ea5e9' }}
+                  title="Remplir automatiquement avec la date actuelle du PC"
+                >
+                  🔄 Auto depuis PC
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDateModal(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: 20,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    color: '#64748b'
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             </div>
+
 
             {/* Modal Content with yellow background matching Image 1 */}
             <div style={{ padding: '28px 24px 36px', display: 'flex', flexDirection: 'column', gap: 28 }}>
