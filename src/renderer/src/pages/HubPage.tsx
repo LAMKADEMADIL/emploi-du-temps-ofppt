@@ -914,13 +914,15 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   function handleSyncFeuillesGroupe() {
     localStorage.setItem('annee_formation_groupe', anneeGroupe)
     localStorage.setItem('periode_application_groupe', periodeGroupe)
-    toast.success('✅ Synchronisation des feuilles Groupe effectuée !')
+    toast.success('✅ Feuilles Groupe synchronisées avec succès !')
+    setShowDateModal(false)
   }
 
   function handleSyncFeuillesFormateur() {
     localStorage.setItem('annee_formation_formateur', anneeFormateur)
     localStorage.setItem('periode_application_formateur', periodeFormateur)
-    toast.success('✅ Synchronisation des feuilles Formateur effectuée !')
+    toast.success('✅ Feuilles Formateur synchronisées avec succès !')
+    setShowDateModal(false)
   }
 
   const totalSeancesCount = Object.keys(profSchedule).length
@@ -1323,7 +1325,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                 EMPLOI DU TEMPS DU FORMATEUR FACE A FACE : Stagiaires
               </h1>
               <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>
-                ANNEE DE FORMATION : 2025-2026
+                ANNEE DE FORMATION : {anneeFormateur}
               </div>
             </div>
 
@@ -1428,7 +1430,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
               </div>
               <div style={{ marginTop: 16 }}>
                 <span style={{ fontWeight: 800 }}>Période d'application : </span>
-                <span style={{ fontWeight: 700 }}>Avril (01/04/2026)</span>
+                <span style={{ fontWeight: 700, color: '#1d4ed8' }}>{periodeFormateur}</span>
               </div>
             </div>
           </div>
