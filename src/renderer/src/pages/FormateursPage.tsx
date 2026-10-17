@@ -122,6 +122,14 @@ export default function FormateursPage(): React.ReactElement {
     setIsDeletingAll(true)
     try {
       await formateursService.deleteAll()
+      localStorage.setItem('seed_demo_data_done', 'true')
+      // Clear cached formateur timetables from localStorage
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('edt_prof_')) {
+          localStorage.removeItem(key)
+        }
+      }
       toast.success(lang === 'ar' ? 'تم حذف جميع الأساتذة بنجاح' : 'Tous les formateurs ont été supprimés avec succès')
       setConfirmDeleteAll(false)
       loadFormateurs()

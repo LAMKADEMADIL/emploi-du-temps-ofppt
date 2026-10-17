@@ -231,34 +231,28 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
         const fGroupes = groupes.filter(g => g.id_filiere === f.id || g.code_groupe.toUpperCase().startsWith(filiereCode))
         const fGroupeCodes = new Set(fGroupes.map(g => g.code_groupe.toUpperCase()))
 
-        // Find formateurs assigned to groups of this filière
+        // Find formateurs assigned to groups of this filière from real DB
         const assignedProfs: string[] = []
 
-        // A) Formateurs in DB with groupes_assignes matching this filière
-        formateurs.forEach(formateur => {
-          const hasMatch = formateur.groupes_assignes?.some(gCode => {
-            const clean = gCode.toUpperCase().trim()
-            return fGroupeCodes.has(clean) || clean.startsWith(filiereCode)
-          })
-          if (hasMatch) {
-            const name = (formateur.nom || formateur.nom_prenom || '').toUpperCase()
-            if (name && !assignedProfs.includes(name)) {
-              assignedProfs.push(name)
+        if (formateurs && formateurs.length > 0) {
+          formateurs.forEach(formateur => {
+            const hasMatch = formateur.groupes_assignes?.some(gCode => {
+              const clean = gCode.toUpperCase().trim()
+              return fGroupeCodes.has(clean) || clean.startsWith(filiereCode)
+            })
+            if (hasMatch) {
+              const name = (formateur.nom || formateur.nom_prenom || '').toUpperCase()
+              if (name && !assignedProfs.includes(name)) {
+                assignedProfs.push(name)
+              }
             }
-          }
-        })
-
-        // B) If no profs found from DB assignments, merge with fallback model for this filière code
-        const fallback = DEFAULT_FALLBACK_COLS.find(df => df.filiere.toUpperCase() === filiereCode)
-        if (fallback) {
-          fallback.profs.forEach(p => {
-            if (!assignedProfs.includes(p)) assignedProfs.push(p)
           })
         }
 
         // Determine 1ère année and 2ème année codes
         const annee1 = fGroupes.find(g => g.code_groupe.match(/1\d\d/))?.code_groupe.replace(/\s+/g, '') || `${filiereCode}100`
         const annee2 = fGroupes.find(g => g.code_groupe.match(/2\d\d/))?.code_groupe.replace(/\s+/g, '') || `${filiereCode}200`
+        const fallback = DEFAULT_FALLBACK_COLS.find(df => df.filiere.toUpperCase() === filiereCode)
         const anneeExtra = fallback?.anneeExtra || ''
 
         return {
@@ -271,9 +265,38 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       })
     }
 
-    // Fallback: sorted alphabetically
-    return [...DEFAULT_FALLBACK_COLS].sort((a, b) => a.filiere.localeCompare(b.filiere))
+    // Fallback: If no filieres exist in DB, only show structure, profs empty if formateurs is empty
+    return DEFAULT_FALLBACK_COLS
+      .map(col => ({
+        ...col,
+        profs: formateurs && formateurs.length > 0 ? col.profs : []
+      }))
+      .sort((a, b) => a.filiere.localeCompare(b.filiere))
   }, [filieres, formateurs, groupes])
+
+  // ── 2. Communication Modules et Formateurs dynamiques ─────────────────────
+  const displayCommCols = useMemo(() => {
+    return DEFAULT_COMM_COLS.map(col => {
+      // Si aucun formateur dans la base (ou après suppression), colonnes vides
+      if (!formateurs || formateurs.length === 0) {
+        return { module: col.module, profs: [] }
+      }
+
+      // Recherche uniquement parmi les formateurs réels présents dans la base
+      const matchingProfs = formateurs
+        .filter(f => {
+          const fn = (f.nom_prenom || f.nom || '').toUpperCase()
+          return col.profs.some(p => fn.includes(p.toUpperCase())) ||
+            f.groupes_assignes?.some(g => g.toUpperCase().includes(col.module.toUpperCase()))
+        })
+        .map(f => (f.nom || f.nom_prenom || '').toUpperCase())
+
+      return {
+        module: col.module,
+        profs: matchingProfs
+      }
+    })
+  }, [formateurs])
 
   // ── Open Section Timetable ──────────────────────────────────────────────────
   async function openSectionTimetable(groupeCodeSample: string, filiereCode: string, anneeLabel: string) {
@@ -2278,7 +2301,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
               <thead>
                 <tr>
                   <th
-                    colSpan={DEFAULT_COMM_COLS.length}
+                    colSpan={displayCommCols.length}
                     style={{
                       background: '#f59e0b',
                       color: '#000000',
@@ -2295,12 +2318,12 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   </th>
                 </tr>
                 <tr style={{ background: '#fbbf24', color: '#000', borderBottom: '2px solid #000' }}>
-                  {DEFAULT_COMM_COLS.map((col, idx) => (
+                  {displayCommCols.map((col, idx) => (
                     <th
                       key={idx}
                       style={{
                         padding: '6px 4px',
-                        borderRight: idx < DEFAULT_COMM_COLS.length - 1 ? '1.5px solid #000' : 'none',
+                        borderRight: idx < displayCommCols.length - 1 ? '1.5px solid #000' : 'none',
                         fontWeight: 900,
                         fontSize: 13
                       }}
@@ -2314,7 +2337,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                 {/* Communication profs rows (max 6 rows) */}
                 {Array.from({ length: 6 }).map((_, rowIdx) => (
                   <tr key={rowIdx}>
-                    {DEFAULT_COMM_COLS.map((col, colIdx) => {
+                    {displayCommCols.map((col, colIdx) => {
                       const prof = col.profs[rowIdx]
                       const matches = !searchTerm || (prof && prof.toLowerCase().includes(searchTerm.toLowerCase()))
                       return (
@@ -2322,7 +2345,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                           key={colIdx}
                           style={{
                             padding: '3px 4px',
-                            borderRight: colIdx < DEFAULT_COMM_COLS.length - 1 ? '1.5px solid #000' : 'none',
+                            borderRight: colIdx < displayCommCols.length - 1 ? '1.5px solid #000' : 'none',
                             borderBottom: rowIdx < 5 ? '1.5px solid #000' : 'none',
                             height: 28,
                             background: prof ? (matches ? '#22d3ee' : '#e0f2fe') : '#ffffff'

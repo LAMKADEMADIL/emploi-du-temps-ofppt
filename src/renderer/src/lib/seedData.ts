@@ -76,14 +76,21 @@ export async function migrateSalles(): Promise<void> {
 
 export async function seedDemoData(): Promise<boolean> {
   try {
+    // If the demo data was already handled or user cleared data, do not re-seed automatically
+    if (localStorage.getItem('seed_demo_data_done') === 'true') {
+      return false
+    }
+
     // Check if data already exists
     const formateursSnap = await getDocs(collection(db, 'formateurs'))
     if (!formateursSnap.empty) {
+      localStorage.setItem('seed_demo_data_done', 'true')
       console.log('Data already exists, skipping seed.')
       return false
     }
 
     console.log('Seeding demo data...')
+    localStorage.setItem('seed_demo_data_done', 'true')
 
     // Add formateurs
     for (const f of DEMO_FORMATEURS) {
