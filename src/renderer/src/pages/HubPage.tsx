@@ -677,6 +677,80 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   const totalSeancesCount = Object.keys(profSchedule).length
   const masseHoraireCalculated = totalSeancesCount * 2.5
 
+  // ── Compute exact groups taught by the active formateur from Database ─────────
+  const formateurAssignedGroups = useMemo(() => {
+    if (!selectedProfName) return []
+    const profNameClean = selectedProfName.toUpperCase().trim()
+
+    // 1. Find formateur object from DB
+    const currentProf = formateurs.find(f => 
+      (f.nom_prenom || '').toUpperCase().trim() === profNameClean ||
+      (f.nom || '').toUpperCase().trim() === profNameClean ||
+      (f.nom_prenom || '').toUpperCase().includes(profNameClean) ||
+      (f.nom || '').toUpperCase().includes(profNameClean) ||
+      profNameClean.includes((f.nom_prenom || '').toUpperCase().trim())
+    )
+
+    const profFiliereCode = (selectedProfFiliere || '').toUpperCase().trim()
+
+    // 2. Get assigned codes from currentProf.groupes_assignes (DNA / Affectations)
+    const assignedCodes = (currentProf?.groupes_assignes || []).map(c => c.toUpperCase().trim()).filter(Boolean)
+
+    const matchedGroupCodes = new Set<string>()
+
+    // A) If formateur has direct assignments in groupes_assignes:
+    if (assignedCodes.length > 0) {
+      assignedCodes.forEach(ac => {
+        if (ac.endsWith('00')) {
+          // e.g. 'EM100' -> matches 'EM101', 'EM102' (year 1)
+          // e.g. 'EM200' -> matches 'EM201', 'EM202' (year 2)
+          const basePrefix = ac.slice(0, -2)
+          groupes.forEach(g => {
+            const gc = g.code_groupe.toUpperCase().trim()
+            if (gc.startsWith(basePrefix)) matchedGroupCodes.add(gc)
+          })
+        } else {
+          const found = groupes.find(g => g.code_groupe.toUpperCase().trim() === ac)
+          if (found) {
+            matchedGroupCodes.add(found.code_groupe.toUpperCase().trim())
+          } else {
+            matchedGroupCodes.add(ac)
+          }
+        }
+      })
+    }
+
+    // B) Include all groups of the formateur's filière from groupes collection
+    if (profFiliereCode) {
+      groupes.forEach(g => {
+        const gc = g.code_groupe.toUpperCase().trim()
+        if (gc.startsWith(profFiliereCode)) {
+          matchedGroupCodes.add(gc)
+        }
+      })
+    }
+
+    // C) Also include any groups already present in this formateur's schedule
+    Object.values(profSchedule).forEach(slot => {
+      if (slot.groupe && slot.groupe !== '-' && slot.groupe.trim()) {
+        matchedGroupCodes.add(slot.groupe.toUpperCase().trim())
+      }
+    })
+
+    // Sort alphabetically (e.g. EM101, EM102, EM201, EM202)
+    const result = Array.from(matchedGroupCodes).sort((a, b) => a.localeCompare(b))
+
+    // Fallback: if no group matched, show groups filtered by filiere or database groups
+    if (result.length === 0) {
+      const filiereGroups = profFiliereCode 
+        ? groupes.filter(g => g.code_groupe.toUpperCase().startsWith(profFiliereCode)).map(g => g.code_groupe)
+        : []
+      return filiereGroups.length > 0 ? filiereGroups.sort((a, b) => a.localeCompare(b)) : groupes.map(g => g.code_groupe).slice(0, 12)
+    }
+
+    return result
+  }, [selectedProfName, selectedProfFiliere, formateurs, groupes, profSchedule])
+
   // ═══════════════════════════════════════════════════════════════════════════
   // VUE 2: EMPLOI DU TEMPS DU FORMATEUR (FACE A FACE)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1396,27 +1470,54 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Groupe</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>
+                      Groupe {selectedProfFiliere ? `(${selectedProfFiliere})` : ''}
+                    </label>
+                    <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                      {formateurAssignedGroups.length} groupe(s) assigné(s)
+                    </span>
+                  </div>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Ex: TFM101"
+                    placeholder={`Ex: ${selectedProfFiliere ? `${selectedProfFiliere}101` : 'TFM101'}`}
                     value={editGroupe}
                     onChange={(e) => setEditGroupe(e.target.value.toUpperCase())}
+                    list="formateur-groupes-list"
                     autoFocus
                   />
-                  {groupes.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                      {groupes.slice(0, 8).map(g => (
-                        <button
-                          key={g.id}
-                          type="button"
-                          onClick={() => setEditGroupe(g.code_groupe)}
-                          style={{ padding: '2px 8px', fontSize: 11, background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer' }}
-                        >
-                          {g.code_groupe}
-                        </button>
-                      ))}
+                  <datalist id="formateur-groupes-list">
+                    {groupes.map(g => (
+                      <option key={g.id} value={g.code_groupe} />
+                    ))}
+                  </datalist>
+                  {formateurAssignedGroups.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                      {formateurAssignedGroups.map(grpCode => {
+                        const isSelected = editGroupe === grpCode
+                        return (
+                          <button
+                            key={grpCode}
+                            type="button"
+                            onClick={() => setEditGroupe(grpCode)}
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              background: isSelected ? '#2563eb' : '#f1f5f9',
+                              color: isSelected ? '#ffffff' : '#0f172a',
+                              border: isSelected ? '1.5px solid #1d4ed8' : '1px solid #cbd5e1',
+                              borderRadius: 6,
+                              cursor: 'pointer',
+                              transition: 'all 0.15s',
+                              boxShadow: isSelected ? '0 2px 4px rgba(37,99,235,0.3)' : 'none'
+                            }}
+                          >
+                            {grpCode}
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
