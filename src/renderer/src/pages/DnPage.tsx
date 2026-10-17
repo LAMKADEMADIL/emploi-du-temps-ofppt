@@ -2,18 +2,30 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   Database,
   FileSpreadsheet,
-  Download,
   Search,
   Building2,
   Layers,
-  CheckCircle2,
-  Plus
+  Plus,
+  Moon,
+  Trash2,
+  X
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
 import { groupesService, filieresService } from '../services/firebaseService'
 import type { Groupe, Filiere } from '../types'
 import { useTranslation } from '../lib/i18n'
+
+interface DnRowData {
+  rowKey: string
+  filiereId: string
+  defaultCode: string
+  defaultName: string
+  defaultNbr: number
+  defaultPrint: string
+  isCds: boolean
+  groupCount: number
+}
 
 export default function DnPage(): React.ReactElement {
   const { lang } = useTranslation()
@@ -26,21 +38,78 @@ export default function DnPage(): React.ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
 
-  // Manual Add State
-  const [manualFiliere, setManualFiliere] = useState('')
-  const [manualNbrGroupe, setManualNbrGroupe] = useState<number | ''>('')
-  const [manualAnnee, setManualAnnee] = useState<1 | 2>(1)
-  const [isSavingManual, setIsSavingManual] = useState(false)
+  // CDS Modal state
+  const [isCdsModalOpen, setIsCdsModalOpen] = useState(false)
+  const [selectedFiliereId, setSelectedFiliereId] = useState('')
+  const [cdsYear, setCdsYear] = useState<1 | 2 | 3>(1)
+  const [cdsGroupCode, setCdsGroupCode] = useState('')
+  const [isSavingCds, setIsSavingCds] = useState(false)
 
-  // Editable cell values per row key "filiereId-annee"
-  const [synValues, setSynValues] = useState<Record<string, string>>({})
-  const [nbrValues, setNbrValues] = useState<Record<string, string>>({})
-  const [codeValues, setCodeValues] = useState<Record<string, string>>({})
-  const [printValues, setPrintValues] = useState<Record<string, string>>({})
+  // Editable cell values per row key persisted in localStorage
+  const [synValues, setSynValues] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('dn_synValues') || '{}')
+    } catch {
+      return {}
+    }
+  })
+  const [nbrValues, setNbrValues] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('dn_nbrValues') || '{}')
+    } catch {
+      return {}
+    }
+  })
+  const [codeValues, setCodeValues] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('dn_codeValues') || '{}')
+    } catch {
+      return {}
+    }
+  })
+  const [printValues, setPrintValues] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('dn_printValues') || '{}')
+    } catch {
+      return {}
+    }
+  })
 
   // Dynamic extra columns
-  const [extraCols, setExtraCols] = useState<{ id: string; header: string }[]>([])
-  const [extraColValues, setExtraColValues] = useState<Record<string, Record<string, string>>>({})
+  const [extraCols, setExtraCols] = useState<{ id: string; header: string }[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('dn_extraCols') || '[]')
+    } catch {
+      return []
+    }
+  })
+  const [extraColValues, setExtraColValues] = useState<Record<string, Record<string, string>>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('dn_extraColValues') || '{}')
+    } catch {
+      return {}
+    }
+  })
+
+  // Persist edits to localStorage
+  useEffect(() => {
+    localStorage.setItem('dn_synValues', JSON.stringify(synValues))
+  }, [synValues])
+  useEffect(() => {
+    localStorage.setItem('dn_nbrValues', JSON.stringify(nbrValues))
+  }, [nbrValues])
+  useEffect(() => {
+    localStorage.setItem('dn_codeValues', JSON.stringify(codeValues))
+  }, [codeValues])
+  useEffect(() => {
+    localStorage.setItem('dn_printValues', JSON.stringify(printValues))
+  }, [printValues])
+  useEffect(() => {
+    localStorage.setItem('dn_extraCols', JSON.stringify(extraCols))
+  }, [extraCols])
+  useEffect(() => {
+    localStorage.setItem('dn_extraColValues', JSON.stringify(extraColValues))
+  }, [extraColValues])
 
   function addExtraCol() {
     const id = `col_${Date.now()}`
@@ -86,6 +155,9 @@ export default function DnPage(): React.ReactElement {
 
       setGroupes(mapped)
       setFilieres(filieresData)
+      if (filieresData.length > 0 && !selectedFiliereId) {
+        setSelectedFiliereId(filieresData[0].id || '')
+      }
     } catch (err) {
       console.error(err)
       toast.error(lang === 'ar' ? 'حدث خطأ أثناء تحميل البيانات' : 'Erreur lors du chargement des données')
@@ -94,7 +166,7 @@ export default function DnPage(): React.ReactElement {
     }
   }
 
-  // Handle Excel File Upload for DN sheet
+  // Handle Excel File Upload for DN sheet with CDS support
   function handleExcelUpload(e: React.ChangeEvent<HTMLInputElement>): void {
     const file = e.target.files?.[0]
     if (!file) return
@@ -106,7 +178,6 @@ export default function DnPage(): React.ReactElement {
         const data = new Uint8Array(event.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: 'array' })
 
-        // Check if there's a sheet named "DN"
         const dnSheetName =
           workbook.SheetNames.find((s) => s.trim().toUpperCase() === 'DN') ||
           workbook.SheetNames[0]
@@ -128,16 +199,15 @@ export default function DnPage(): React.ReactElement {
         let createdGroupes = 0
         let updatedGroupes = 0
 
-        // In DN sheet, groups are usually in columns like TEMI100, TEMI200 starting from a specific column (e.g. col G)
-        // We will scan the whole sheet for any cell matching the group code pattern (e.g., letters followed by 3 digits)
-        const groupPattern = /^[A-Z]{2,6}\d{3}$/i
+        // Support standard groups as well as CDS groups (e.g. TEMI101, TEMI101 CDS, RVA101 CDS)
+        const groupPattern = /^[A-Z]{1,8}\s*\d{3}(?:\s*CDS)?$/i
         const foundGroups = new Set<string>()
 
         for (let r = 0; r < rows.length; r++) {
           for (let c = 0; c < rows[r].length; c++) {
-            const cellValue = String(rows[r][c] || '').trim().toUpperCase()
-            if (groupPattern.test(cellValue)) {
-              foundGroups.add(cellValue)
+            const raw = String(rows[r][c] || '').trim().toUpperCase()
+            if (groupPattern.test(raw)) {
+              foundGroups.add(raw)
             }
           }
         }
@@ -147,12 +217,14 @@ export default function DnPage(): React.ReactElement {
           return
         }
 
-        // Now process found groups
         for (const gCode of Array.from(foundGroups)) {
-          // Extract filiere code (e.g., "TEMI" from "TEMI101")
-          const filiereCode = gCode.replace(/\d+$/, '')
+          // Extract filiere code (e.g. "TEMI" from "TEMI101 CDS" or "TEMI101")
+          const cleanCode = gCode.replace(/\s*CDS$/i, '')
+          const filiereCode = cleanCode.replace(/\d+$/, '').trim()
 
-          // Find or create filiere
+          // Skip headers like TEMI100 or TEMI100CDS
+          if (/\d00$/.test(cleanCode)) continue
+
           let filiere = filieres.find((f) => f.code_filiere.toUpperCase() === filiereCode)
           let filiereId = filiere?.id
 
@@ -167,25 +239,19 @@ export default function DnPage(): React.ReactElement {
             createdFilieres++
           }
 
-          // Check if group exists
           const existing = groupes.find((g) => g.code_groupe.toUpperCase() === gCode)
           if (existing && existing.id) {
-            // Update if needed
             if (existing.id_filiere !== filiereId) {
               await groupesService.update(existing.id, { id_filiere: filiereId })
               updatedGroupes++
             }
           } else {
-            // Create group
-            // Check if it ends with 00 (which is usually a header like TEMI100, not an actual group like TEMI101)
-            if (!gCode.endsWith('00')) {
-              await groupesService.add({
-                code_groupe: gCode,
-                id_filiere: filiereId,
-                en_stage: false
-              })
-              createdGroupes++
-            }
+            await groupesService.add({
+              code_groupe: gCode,
+              id_filiere: filiereId,
+              en_stage: false
+            })
+            createdGroupes++
           }
         }
 
@@ -195,7 +261,6 @@ export default function DnPage(): React.ReactElement {
             : `Base synchronisée! ${createdFilieres} filières et ${createdGroupes} groupes ajoutés.`
         )
         loadData()
-
       } catch (err) {
         console.error(err)
         toast.error(lang === 'ar' ? 'فشل قراءة ورقة DN' : 'Erreur lors de la lecture de la feuille DN')
@@ -207,63 +272,172 @@ export default function DnPage(): React.ReactElement {
     reader.readAsArrayBuffer(file)
   }
 
-  // Handle Manual Add
-  async function handleManualAdd(e: React.FormEvent) {
+  // Quick Add CDS Group
+  async function handleAddCdsGroup(e: React.FormEvent) {
     e.preventDefault()
-    if (!manualFiliere || !manualNbrGroupe) return
-    setIsSavingManual(true)
-    
+    if (!selectedFiliereId) {
+      toast.error(lang === 'ar' ? 'الرجاء اختيار الشعبة' : 'Veuillez sélectionner une filière')
+      return
+    }
+
+    const filiere = filieres.find(f => f.id === selectedFiliereId)
+    if (!filiere) return
+
+    let finalCode = cdsGroupCode.trim().toUpperCase()
+    if (!finalCode) {
+      // Auto generate code like TEMI101 CDS or TEMI301 CDS
+      finalCode = `${filiere.code_filiere}${cdsYear}01 CDS`
+    } else if (!finalCode.includes('CDS')) {
+      finalCode = `${finalCode} CDS`
+    }
+
+    // Check if group already exists
+    const exists = groupes.some(g => g.code_groupe.toUpperCase() === finalCode)
+    if (exists) {
+      toast.error(lang === 'ar' ? `الفوج "${finalCode}" موجود بالفعل!` : `Le groupe « ${finalCode} » existe déjà !`)
+      return
+    }
+
     try {
-      const code = manualFiliere.trim().toUpperCase()
-      
-      // Find or create filiere
-      let filiere = filieres.find((f) => f.code_filiere.toUpperCase() === code)
-      let filiereId = filiere?.id
-
-      if (!filiereId) {
-        filiereId = await filieresService.add({
-          code_filiere: code,
-          nom_filiere: code
-        })
-        const newFiliere = { id: filiereId, code_filiere: code, nom_filiere: code }
-        filieres.push(newFiliere)
-      }
-
-      // Add groups
-      const startNum = manualAnnee === 1 ? 101 : 201
-      const numGroups = Number(manualNbrGroupe)
-      let added = 0
-      for (let i = 0; i < numGroups; i++) {
-        const gCode = `${code}${startNum + i}`
-        const exists = groupes.some(g => g.code_groupe === gCode)
-        if (!exists) {
-          await groupesService.add({
-            code_groupe: gCode,
-            id_filiere: filiereId,
-            en_stage: false
-          })
-          added++
-        }
-      }
-      
-      toast.success(lang === 'ar' ? `تمت الإضافة! ${added} فوج جديد.` : `Ajouté! ${added} nouveaux groupes.`)
-      setManualFiliere('')
-      setManualNbrGroupe('')
+      setIsSavingCds(true)
+      await groupesService.add({
+        code_groupe: finalCode,
+        id_filiere: selectedFiliereId,
+        en_stage: false
+      })
+      toast.success(
+        lang === 'ar'
+          ? `تمت إضافة الفوج المسائي "${finalCode}" بنجاح!`
+          : `Groupe du soir « ${finalCode} » ajouté avec succès !`
+      )
+      setIsCdsModalOpen(false)
+      setCdsGroupCode('')
       loadData()
-    } catch (err) {
-      console.error(err)
-      toast.error(lang === 'ar' ? 'حدث خطأ أثناء الحفظ' : 'Erreur lors de l\'enregistrement')
+    } catch {
+      toast.error(lang === 'ar' ? 'حدث خطأ أثناء إضافة الفوج' : 'Erreur lors de l\'ajout du groupe')
     } finally {
-      setIsSavingManual(false)
+      setIsSavingCds(false)
     }
   }
 
-  // Filter filieres
+  // Helper functions for CDS detection and year extraction
+  const isCds = (code: string) => /CDS/i.test(code)
+
+  const getYear = (code: string): number => {
+    const m = code.match(/\d+/)
+    if (!m) return 1
+    const firstDigit = parseInt(m[0][0], 10)
+    return isNaN(firstDigit) ? 1 : firstDigit
+  }
+
+  // Filter filieres by search term
   const filteredFilieres = filieres.filter(f =>
     searchTerm === '' ||
     f.code_filiere.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    f.nom_filiere.toLowerCase().includes(searchTerm.toLowerCase())
+    f.nom_filiere.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    searchTerm.toLowerCase().includes('cds')
   )
+
+  // 1. Build Day Rows (excluding CDS groups so TEMI100 has 6 and RVA100 has 8)
+  const dayRows: DnRowData[] = []
+  filteredFilieres.forEach((filiere) => {
+    const filiereGroupes = groupes.filter(
+      (g) => g.id_filiere === filiere.id && !isCds(g.code_groupe)
+    )
+
+    const yearsPresent = Array.from(new Set(filiereGroupes.map(g => getYear(g.code_groupe)))).sort()
+    const yearsToRender = yearsPresent.length > 0 ? yearsPresent : [1, 2]
+
+    for (const y of yearsToRender) {
+      const matching = filiereGroupes.filter(g => getYear(g.code_groupe) === y)
+      if (filiereGroupes.length === 0 && y > (filiere.nombre_annees || 2)) continue
+      if (filiereGroupes.length > 0 && matching.length === 0) continue
+
+      const key = `${filiere.id}-${y}`
+      dayRows.push({
+        rowKey: key,
+        filiereId: filiere.id || '',
+        defaultCode: `${filiere.code_filiere}${y}00`,
+        defaultName: filiere.code_filiere,
+        defaultNbr: matching.length,
+        defaultPrint: 'P',
+        isCds: false,
+        groupCount: matching.length
+      })
+    }
+  })
+
+  // 2. Build CDS Rows (Cours du Soir) to display at the bottom of the table
+  const allCdsGroupes = groupes.filter((g) => isCds(g.code_groupe))
+  const cdsByFiliereAndYear = new Map<string, Map<number, Groupe[]>>()
+
+  allCdsGroupes.forEach((g) => {
+    let fId = g.id_filiere
+    if (!fId) {
+      const matchedF = filieres.find(f => g.code_groupe.toUpperCase().startsWith(f.code_filiere.toUpperCase()))
+      if (matchedF?.id) fId = matchedF.id
+    }
+    if (!fId) fId = 'unknown'
+
+    const y = getYear(g.code_groupe)
+    if (!cdsByFiliereAndYear.has(fId)) {
+      cdsByFiliereAndYear.set(fId, new Map())
+    }
+    const yearMap = cdsByFiliereAndYear.get(fId)!
+    if (!yearMap.has(y)) {
+      yearMap.set(y, [])
+    }
+    yearMap.get(y)!.push(g)
+  })
+
+  const cdsRows: DnRowData[] = []
+  cdsByFiliereAndYear.forEach((yearMap, fId) => {
+    const filiere = filieres.find((f) => f.id === fId)
+    const filiereCode = filiere?.code_filiere || 'CDS'
+
+    if (
+      searchTerm &&
+      !filiereCode.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !searchTerm.toLowerCase().includes('cds')
+    ) {
+      return
+    }
+
+    yearMap.forEach((grpList, y) => {
+      const key = `${fId}-cds-${y}`
+      cdsRows.push({
+        rowKey: key,
+        filiereId: fId,
+        defaultCode: `${filiereCode}${y}00CDS`,
+        defaultName: filiereCode,
+        defaultNbr: grpList.length,
+        defaultPrint: 'L',
+        isCds: true,
+        groupCount: grpList.length
+      })
+    })
+  })
+
+  // Sort CDS rows matching Excel style (e.g., TEMI300CDS, TEMI100CDS, RVA100CDS)
+  cdsRows.sort((a, b) => {
+    // If TEMI, put 300CDS first, then 100CDS
+    if (a.defaultName === b.defaultName) {
+      return b.defaultCode.localeCompare(a.defaultCode)
+    }
+    return a.defaultName.localeCompare(b.defaultName)
+  })
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    textAlign: 'center',
+    fontSize: '14.5px',
+    fontWeight: 700,
+    color: '#000',
+    cursor: 'text'
+  }
 
   return (
     <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -294,8 +468,8 @@ export default function DnPage(): React.ReactElement {
               </h1>
               <p style={{ fontSize: 13.5, color: '#4b5563', margin: '3px 0 0 0' }}>
                 {lang === 'ar'
-                  ? 'إدارة قاعدة بيانات الشعب والأفواج واستيراد الهيكلة من ملف الإكسل'
-                  : 'Gestion de la base des filières et groupes à partir du fichier Excel'}
+                  ? 'إدارة قاعدة بيانات الشعب والأفواج وتصنيف الأفواج النهارية والمسائية (CDS)'
+                  : 'Gestion de la base des filières et groupes (Jour et Cours du Soir CDS)'}
               </p>
             </div>
           </div>
@@ -303,6 +477,51 @@ export default function DnPage(): React.ReactElement {
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Add CDS Group Button */}
+          <button
+            type="button"
+            onClick={() => setIsCdsModalOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 16px',
+              fontSize: '13.5px',
+              fontWeight: 700,
+              background: '#fffbeb',
+              color: '#b45309',
+              border: '1.5px solid #fcd34d',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(245, 158, 11, 0.15)',
+              transition: 'all 0.2s'
+            }}
+            title={lang === 'ar' ? 'إضافة فوج دراسي مسائي CDS' : 'Ajouter un groupe de cours du soir CDS'}
+          >
+            <Moon size={16} color="#d97706" />
+            {lang === 'ar' ? '+ إضافة فوج مسائي (CDS)' : '+ Ajouter groupe CDS'}
+          </button>
+
+          {/* Add Extra Column Button */}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={addExtraCol}
+            style={{
+              padding: '10px 16px',
+              fontSize: '13.5px',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+            title={lang === 'ar' ? 'إضافة عمود مخصص جديد' : 'Ajouter une colonne personnalisée'}
+          >
+            <Plus size={16} />
+            {lang === 'ar' ? 'إضافة عمود' : 'Ajouter colonne'}
+          </button>
+
+          {/* Import DN Sheet Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -311,8 +530,8 @@ export default function DnPage(): React.ReactElement {
               display: 'inline-flex',
               alignItems: 'center',
               gap: 8,
-              padding: '11px 18px',
-              fontSize: '14px',
+              padding: '10px 18px',
+              fontSize: '13.5px',
               fontWeight: 700,
               background: 'linear-gradient(135deg, #10b981, #059669)',
               color: 'white',
@@ -323,11 +542,11 @@ export default function DnPage(): React.ReactElement {
               transition: 'all 0.2s',
               opacity: isImporting ? 0.7 : 1
             }}
-            onMouseEnter={(e) => { if (!isImporting) e.currentTarget.style.transform = 'translateY(-1px)' }}
-            onMouseLeave={(e) => { if (!isImporting) e.currentTarget.style.transform = 'translateY(0)' }}
           >
-            <FileSpreadsheet size={18} />
-            {isImporting ? (lang === 'ar' ? 'جاري المزامنة...' : 'Synchronisation...') : (lang === 'ar' ? 'استيراد ورقة DN' : 'Importer la feuille DN')}
+            <FileSpreadsheet size={17} />
+            {isImporting
+              ? (lang === 'ar' ? 'جاري المزامنة...' : 'Synchronisation...')
+              : (lang === 'ar' ? 'استيراد ورقة DN' : 'Importer la feuille DN')}
           </button>
         </div>
       </div>
@@ -337,7 +556,7 @@ export default function DnPage(): React.ReactElement {
         {/* Statistics Bar */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: 16,
           marginBottom: 20
         }}>
@@ -382,40 +601,65 @@ export default function DnPage(): React.ReactElement {
               <Layers size={22} />
             </div>
           </div>
+
+          <div style={{
+            background: 'white', border: '1.5px solid #e5e7eb', borderRadius: 14,
+            padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+          }}>
+            <div>
+              <p style={{ fontSize: 13, color: '#d97706', margin: 0, fontWeight: 700 }}>
+                {lang === 'ar' ? 'أفواج الدروس المسائية (CDS)' : 'Groupes Cours du Soir (CDS)'}
+              </p>
+              <h3 style={{ fontSize: 26, fontWeight: 800, color: '#b45309', margin: '4px 0 0 0' }}>
+                {allCdsGroupes.length}
+              </h3>
+            </div>
+            <div style={{
+              width: 44, height: 44, borderRadius: 10, background: '#fef3c7',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706'
+            }}>
+              <Moon size={22} />
+            </div>
+          </div>
         </div>
 
         {/* Filter Bar */}
         <div style={{
           background: 'white', border: '1.5px solid #e5e7eb', borderRadius: 14,
-          padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center'
+          padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, background: '#f9fafb',
-              border: '1.5px solid #d1d5db', borderRadius: 8, padding: '7px 12px', width: '100%', maxWidth: 360
-            }}>
-              <Search size={16} color="#6b7280" />
-              <input
-                type="text"
-                placeholder={lang === 'ar' ? 'ابحث عن شعبة...' : 'Rechercher une filière...'}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{
-                  border: 'none', background: 'transparent', outline: 'none',
-                  fontSize: 14, color: '#0a0a0a', fontWeight: 600, width: '100%'
-                }}
-              />
-            </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, background: '#f9fafb',
+            border: '1.5px solid #d1d5db', borderRadius: 8, padding: '7px 12px', width: '100%', maxWidth: 360
+          }}>
+            <Search size={16} color="#6b7280" />
+            <input
+              type="text"
+              placeholder={lang === 'ar' ? 'ابحث عن شعبة أو CDS...' : 'Rechercher une filière ou CDS...'}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                border: 'none', background: 'transparent', outline: 'none',
+                fontSize: 14, color: '#0a0a0a', fontWeight: 600, width: '100%'
+              }}
+            />
+          </div>
+
+          <div style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600 }}>
+            {lang === 'ar'
+              ? `${dayRows.length} شعبة نهارية + ${cdsRows.length} شعبة مسائية (CDS)`
+              : `${dayRows.length} filières jour + ${cdsRows.length} filières cours du soir (CDS)`}
           </div>
         </div>
 
-        {/* Data List */}
+        {/* Data List Table matching Excel structure */}
         <div className="card" style={{ padding: 0, overflow: 'hidden', border: '2px solid #e5e7eb' }}>
           {loading ? (
             <div className="loading-spinner" style={{ padding: 60 }}>
               <div className="spinner" />
             </div>
-          ) : filteredFilieres.length === 0 ? (
+          ) : dayRows.length === 0 && cdsRows.length === 0 ? (
             <div className="empty-state" style={{ padding: 60 }}>
               <div className="empty-state-icon"><Database size={48} color="#9ca3af" /></div>
               <h3>{lang === 'ar' ? 'لا توجد بيانات' : 'Aucune donnée'}</h3>
@@ -423,7 +667,7 @@ export default function DnPage(): React.ReactElement {
             </div>
           ) : (
             <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 350px)', overflowY: 'auto' }}>
-              <table className="data-table" style={{ borderCollapse: 'collapse', border: '1.5px solid #000' }}>
+              <table className="data-table" style={{ borderCollapse: 'collapse', border: '1.5px solid #000', width: '100%' }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f5dadf', borderBottom: '1.5px solid #000' }}>
                   <tr>
                     <th colSpan={2} style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', color: '#000', fontWeight: 'bold', fontSize: '15px', padding: '8px' }}>
@@ -458,95 +702,267 @@ export default function DnPage(): React.ReactElement {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredFilieres.flatMap((filiere) => {
-                    const filiereGroupes = groupes.filter(g => g.id_filiere === filiere.id)
+                  {/* 1. Day Filières (Regular Classes) */}
+                  {dayRows.map((row) => (
+                    <tr key={row.rowKey}>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={codeValues[row.rowKey] ?? row.defaultCode}
+                          onChange={(e) => setCodeValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                          style={inputStyle}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={codeValues[`${row.rowKey}-name`] ?? row.defaultName}
+                          onChange={(e) => setCodeValues(prev => ({ ...prev, [`${row.rowKey}-name`]: e.target.value }))}
+                          style={inputStyle}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={nbrValues[row.rowKey] ?? String(row.defaultNbr)}
+                          onChange={(e) => setNbrValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                          style={inputStyle}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#1d4ed8', fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={synValues[row.rowKey] ?? ''}
+                          onChange={(e) => setSynValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                          placeholder="..."
+                          style={{ ...inputStyle, color: '#1d4ed8' }}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={printValues[row.rowKey] ?? row.defaultPrint}
+                          onChange={(e) => setPrintValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                          style={{ ...inputStyle, color: '#7c3aed', fontWeight: 800 }}
+                        />
+                      </td>
+                      {extraCols.map(col => (
+                        <td key={col.id} style={{ textAlign: 'center', borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px' }}>
+                          <input
+                            type="text"
+                            value={extraColValues[col.id]?.[row.rowKey] ?? ''}
+                            onChange={(e) => setExtraColCell(col.id, row.rowKey, e.target.value)}
+                            placeholder="..."
+                            style={{ ...inputStyle, color: '#059669' }}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
 
-                    const groupes1A = filiereGroupes.filter(g => {
-                      const match = g.code_groupe.match(/\d+/)
-                      return match ? match[0].startsWith('1') : true
-                    })
+                  {/* 2. Cours du Soir (CDS) Section Header at Bottom */}
+                  {cdsRows.length > 0 && (
+                    <tr style={{ background: '#fef3c7', borderBottom: '1.5px solid #000' }}>
+                      <td
+                        colSpan={5 + extraCols.length}
+                        style={{
+                          textAlign: 'center',
+                          padding: '8px 12px',
+                          fontWeight: 800,
+                          fontSize: '14px',
+                          color: '#b45309',
+                          letterSpacing: '0.5px',
+                          borderBottom: '1.5px solid #000',
+                          borderTop: '2px solid #d97706'
+                        }}
+                      >
+                        🌙 {lang === 'ar' ? 'شعب الدروس المسائية — Cours du Soir (CDS)' : 'Filières Cours du Soir (CDS)'}
+                      </td>
+                    </tr>
+                  )}
 
-                    const groupes2A = filiereGroupes.filter(g => {
-                      const match = g.code_groupe.match(/\d+/)
-                      return match ? match[0].startsWith('2') : false
-                    })
-
-                    const rows: React.ReactNode[] = []
-
-                    if (groupes1A.length > 0) {
-                      const key1 = `${filiere.id}-1`
-                      const inputStyle = {
-                        width: '100%', border: 'none', outline: 'none',
-                        background: 'transparent', textAlign: 'center' as const,
-                        fontSize: '14px', fontWeight: 700, color: '#000', cursor: 'text'
-                      }
-                      rows.push(
-                        <tr key={`${filiere.id}-100`}>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                            <input type="text" value={codeValues[key1] ?? `${filiere.code_filiere}100`} onChange={(e) => setCodeValues(prev => ({ ...prev, [key1]: e.target.value }))} style={inputStyle} />
-                          </td>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                            <input type="text" value={codeValues[`${key1}-name`] ?? filiere.code_filiere} onChange={(e) => setCodeValues(prev => ({ ...prev, [`${key1}-name`]: e.target.value }))} style={inputStyle} />
-                          </td>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                            <input type="text" value={nbrValues[key1] ?? String(groupes1A.length)} onChange={(e) => setNbrValues(prev => ({ ...prev, [key1]: e.target.value }))} style={inputStyle} />
-                          </td>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#1d4ed8', fontSize: '15px' }}>
-                            <input type="text" value={synValues[key1] ?? ''} onChange={(e) => setSynValues(prev => ({ ...prev, [key1]: e.target.value }))} placeholder="..." style={{ ...inputStyle, color: '#1d4ed8' }} />
-                          </td>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                            <input type="text" value={printValues[key1] ?? 'P'} onChange={(e) => setPrintValues(prev => ({ ...prev, [key1]: e.target.value }))} style={{ ...inputStyle, color: '#7c3aed', fontWeight: 800 }} />
-                          </td>
-                          {extraCols.map(col => (
-                            <td key={col.id} style={{ textAlign: 'center', borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px' }}>
-                              <input type="text" value={extraColValues[col.id]?.[key1] ?? ''} onChange={(e) => setExtraColCell(col.id, key1, e.target.value)} placeholder="..." style={{ ...inputStyle, color: '#059669' }} />
-                            </td>
-                          ))}
-                        </tr>
-                      )
-                    }
-
-                    if (groupes2A.length > 0) {
-                      const key2 = `${filiere.id}-2`
-                      const inputStyle2 = {
-                        width: '100%', border: 'none', outline: 'none',
-                        background: 'transparent', textAlign: 'center' as const,
-                        fontSize: '14px', fontWeight: 700, color: '#000', cursor: 'text'
-                      }
-                      rows.push(
-                        <tr key={`${filiere.id}-200`}>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                            <input type="text" value={codeValues[key2] ?? `${filiere.code_filiere}200`} onChange={(e) => setCodeValues(prev => ({ ...prev, [key2]: e.target.value }))} style={inputStyle2} />
-                          </td>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                            <input type="text" value={codeValues[`${key2}-name`] ?? filiere.code_filiere} onChange={(e) => setCodeValues(prev => ({ ...prev, [`${key2}-name`]: e.target.value }))} style={inputStyle2} />
-                          </td>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                            <input type="text" value={nbrValues[key2] ?? String(groupes2A.length)} onChange={(e) => setNbrValues(prev => ({ ...prev, [key2]: e.target.value }))} style={inputStyle2} />
-                          </td>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#1d4ed8', fontSize: '15px' }}>
-                            <input type="text" value={synValues[key2] ?? ''} onChange={(e) => setSynValues(prev => ({ ...prev, [key2]: e.target.value }))} placeholder="..." style={{ ...inputStyle2, color: '#1d4ed8' }} />
-                          </td>
-                          <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
-                            <input type="text" value={printValues[key2] ?? 'P'} onChange={(e) => setPrintValues(prev => ({ ...prev, [key2]: e.target.value }))} style={{ ...inputStyle2, color: '#7c3aed', fontWeight: 800 }} />
-                          </td>
-                          {extraCols.map(col => (
-                            <td key={col.id} style={{ textAlign: 'center', borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px' }}>
-                              <input type="text" value={extraColValues[col.id]?.[key2] ?? ''} onChange={(e) => setExtraColCell(col.id, key2, e.target.value)} placeholder="..." style={{ ...inputStyle2, color: '#059669' }} />
-                            </td>
-                          ))}
-                        </tr>
-                      )
-                    }
-
-                    return rows
-                  })}
+                  {/* 3. Cours du Soir (CDS) Rows at Bottom (TEMI300CDS, TEMI100CDS, RVA100CDS...) */}
+                  {cdsRows.map((row) => (
+                    <tr key={row.rowKey} style={{ background: '#fffbeb' }}>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#b45309', fontWeight: 800, fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={codeValues[row.rowKey] ?? row.defaultCode}
+                          onChange={(e) => setCodeValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                          style={{ ...inputStyle, color: '#b45309', fontWeight: 800 }}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={codeValues[`${row.rowKey}-name`] ?? row.defaultName}
+                          onChange={(e) => setCodeValues(prev => ({ ...prev, [`${row.rowKey}-name`]: e.target.value }))}
+                          style={inputStyle}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#000', fontWeight: 700, fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={nbrValues[row.rowKey] ?? String(row.defaultNbr)}
+                          onChange={(e) => setNbrValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                          style={inputStyle}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#1d4ed8', fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={synValues[row.rowKey] ?? ''}
+                          onChange={(e) => setSynValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                          placeholder="..."
+                          style={{ ...inputStyle, color: '#1d4ed8' }}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center', borderRight: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px', color: '#dc2626', fontWeight: 800, fontSize: '15px' }}>
+                        <input
+                          type="text"
+                          value={printValues[row.rowKey] ?? row.defaultPrint}
+                          onChange={(e) => setPrintValues(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                          style={{ ...inputStyle, color: '#dc2626', fontWeight: 800 }}
+                        />
+                      </td>
+                      {extraCols.map(col => (
+                        <td key={col.id} style={{ textAlign: 'center', borderLeft: '1.5px solid #000', borderBottom: '1.5px solid #000', padding: '4px' }}>
+                          <input
+                            type="text"
+                            value={extraColValues[col.id]?.[row.rowKey] ?? ''}
+                            onChange={(e) => setExtraColCell(col.id, row.rowKey, e.target.value)}
+                            placeholder="..."
+                            style={{ ...inputStyle, color: '#059669' }}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
         </div>
       </div>
+
+      {/* Modal for Adding a CDS Group */}
+      {isCdsModalOpen && (
+        <div className="modal-overlay" onClick={() => !isSavingCds && setIsCdsModalOpen(false)}>
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: 440,
+              width: '92%',
+              padding: '28px 26px 24px',
+              borderRadius: 20,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 38, height: 38, borderRadius: 10,
+                  background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '2px solid #fcd34d'
+                }}>
+                  <Moon size={20} color="#d97706" />
+                </div>
+                <h3 style={{ fontSize: 19, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  {lang === 'ar' ? 'إضافة فوج مسائي (CDS)' : 'Ajouter un groupe CDS'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCdsModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCdsGroup}>
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: 13.5 }}>
+                  {lang === 'ar' ? 'الشعبة' : 'Filière'}
+                </label>
+                <select
+                  className="form-select"
+                  value={selectedFiliereId}
+                  onChange={(e) => setSelectedFiliereId(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1' }}
+                >
+                  {filieres.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.code_filiere} — {f.nom_filiere}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: 13.5 }}>
+                  {lang === 'ar' ? 'السنة / المستوى' : 'Année / Niveau'}
+                </label>
+                <select
+                  className="form-select"
+                  value={cdsYear}
+                  onChange={(e) => setCdsYear(Number(e.target.value) as 1 | 2 | 3)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1' }}
+                >
+                  <option value={1}>{lang === 'ar' ? 'السنة 1 (مثال: 100 CDS)' : '1ère Année (ex: 100 CDS)'}</option>
+                  <option value={2}>{lang === 'ar' ? 'السنة 2 (مثال: 200 CDS)' : '2ème Année (ex: 200 CDS)'}</option>
+                  <option value={3}>{lang === 'ar' ? 'السنة 3 (مثال: 300 CDS)' : '3ème Année (ex: 300 CDS)'}</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 20 }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: 13.5 }}>
+                  {lang === 'ar' ? 'رمز الفوج (اختياري، يترك فارغاً للتوليد التلقائي)' : 'Code du groupe (optionnel)'}
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder={lang === 'ar' ? 'مثال: TEMI101 CDS أو RVA101 CDS' : 'Ex: TEMI101 CDS ou TEMI301 CDS'}
+                  value={cdsGroupCode}
+                  onChange={(e) => setCdsGroupCode(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsCdsModalOpen(false)}
+                  disabled={isSavingCds}
+                  style={{ padding: '9px 18px', borderRadius: 8 }}
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCds}
+                  style={{
+                    padding: '9px 20px',
+                    borderRadius: 8,
+                    fontWeight: 700,
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    color: 'white',
+                    cursor: isSavingCds ? 'wait' : 'pointer'
+                  }}
+                >
+                  {isSavingCds
+                    ? (lang === 'ar' ? 'جارٍ الإضافة...' : 'Ajout...')
+                    : (lang === 'ar' ? 'إضافة الفوج' : 'Ajouter')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
