@@ -107,8 +107,18 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     filiereCode: string
     anneeLabel: string // '1ère Année' | '2ème Année'
     groupes: Groupe[]
-    schedule: Record<string, { nomFormateur: string; nomSalle: string }> // key: `${jour}__${groupeId}__${tsIdx}`
+    schedule: Record<string, { nomFormateur: string; nomSalle: string; module?: string }> // key: `${jour}__${groupeId}__${tsIdx}`
     loading: boolean
+  } | null>(null)
+
+  // Section Cell Edit Modal
+  const [sectionCellModal, setSectionCellModal] = useState<{
+    jour: string
+    groupe: Groupe
+    tsIdx: number
+    formateur: string
+    salle: string
+    module: string
   } | null>(null)
 
   // Cell edit state
@@ -210,15 +220,15 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
 
   // ── Open Section Timetable ──────────────────────────────────────────────────
   async function openSectionTimetable(groupeCodeSample: string, filiereCode: string, anneeLabel: string) {
-    // Determine year digit: 1xx → snée 1, 2xx → snnée 2
+    // Determine year digit: 1xx → année 1, 2xx → année 2
     const yearDigit = groupeCodeSample.match(/([12])\d\d/)?.[1] || '1'
 
     // Get all groups of same filiere & same year
+    const filCode = filiereCode.toUpperCase().replace(/\s+/g, '')
     const sectionGroupes = groupes.filter(g => {
       const code = g.code_groupe.toUpperCase().replace(/\s+/g, '')
-      const filCode = filiereCode.toUpperCase().replace(/\s+/g, '')
-      // Matches filiere prefix + year digit
-      return (code.startsWith(filCode) || g.id_filiere === filieres.find(f => f.code_filiere.toUpperCase() === filCode)?.id) &&
+      const filObj = filieres.find(f => f.code_filiere.toUpperCase().replace(/\s+/g, '') === filCode)
+      return (code.startsWith(filCode) || (filObj && g.id_filiere === filObj.id)) &&
         code.match(new RegExp(`${yearDigit}\\d\\d$`))
     }).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
 
@@ -231,26 +241,132 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     })
 
     try {
-      // Fetch all seances from Firebase
-      const allSeances = await seancesService.getAll()
-      const groupeIds = new Set(sectionGroupes.map(g => g.id!))
-      const sectionSeances = allSeances.filter(s => groupeIds.has(s.id_groupe))
+      // 1. Fetch both seances AND planning_salles from Firebase
+      const [allSeances, planningSallesMap] = await Promise.all([
+        seancesService.getAll().catch(() => []),
+        planningSallesService.getAll().catch(() => ({} as Record<string, any>))
+      ])
 
-      // Build lookup maps
-      const formateursMap = new Map(formateurs.map(f => [f.id!, f]))
-      const sallesMap = new Map(salles.map(s => [s.id!, s]))
+      const schedule: Record<string, { nomFormateur: string; nomSalle: string; module?: string }> = {}
 
-      // Build schedule map: key = `${jour}__${id_groupe}__${tsIdx}`
-      const schedule: Record<string, { nomFormateur: string; nomSalle: string }> = {}
-      for (const seance of sectionSeances) {
-        const tsIdx = ['08:30', '11:00', '13:30', '16:00'].indexOf(seance.heure_debut)
-        if (tsIdx === -1) continue
-        const key = `${seance.jour}__${seance.id_groupe}__${tsIdx}`
-        const formateur = formateursMap.get(seance.id_formateur)
-        const salle = sallesMap.get(seance.id_salle)
-        schedule[key] = {
-          nomFormateur: formateur ? (formateur.nom || formateur.nom_prenom || seance.id_formateur).toUpperCase() : seance.id_formateur,
-          nomSalle: salle ? salle.nom_salle.toUpperCase() : seance.id_salle
+      // 2. Process planning_salles (Primary planning database used by Planning Salles & Formateurs)
+      if (planningSallesMap && typeof planningSallesMap === 'object') {
+        for (const [key, cell] of Object.entries(planningSallesMap)) {
+          if (!cell || !cell.groupeId) continue
+          const parts = key.split('__')
+          if (parts.length < 3) continue
+          const jourUpper = parts[0].toUpperCase()
+          const salleFromKey = parts[1].toUpperCase()
+          const tsIdx = parseInt(parts[2], 10)
+          if (isNaN(tsIdx) || tsIdx < 0 || tsIdx > 3) continue
+
+          // Find target group in this section
+          const targetGroup = sectionGroupes.find(g => 
+            (g.id && g.id === cell.groupeId) ||
+            g.code_groupe.toUpperCase().replace(/\s+/g, '') === String(cell.groupeId).toUpperCase().replace(/\s+/g, '')
+          )
+          if (!targetGroup) continue
+
+          // Resolve formateur name
+          const formateur = formateurs.find(f => 
+            (f.id && f.id === cell.formateurId) ||
+            (f.nom_prenom && f.nom_prenom.toUpperCase().includes(String(cell.formateurId).toUpperCase())) ||
+            (f.nom && f.nom.toUpperCase().includes(String(cell.formateurId).toUpperCase())) ||
+            String(cell.formateurId).toUpperCase().includes((f.nom_prenom || '').toUpperCase())
+          )
+          const nomFormateur = formateur
+            ? (formateur.nom && formateur.prenom ? `${formateur.nom} ${formateur.prenom}` : formateur.nom_prenom || formateur.nom || cell.formateurId).toUpperCase()
+            : String(cell.formateurId).toUpperCase()
+
+          const cellData = {
+            nomFormateur,
+            nomSalle: salleFromKey,
+            module: cell.module || 'M'
+          }
+
+          if (targetGroup.id) schedule[`${jourUpper}__${targetGroup.id}__${tsIdx}`] = cellData
+          schedule[`${jourUpper}__${targetGroup.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`] = cellData
+        }
+      }
+
+      // 3. Process seances collection
+      if (allSeances && Array.isArray(allSeances)) {
+        for (const seance of allSeances) {
+          const targetGroup = sectionGroupes.find(g => 
+            (g.id && g.id === seance.id_groupe) ||
+            g.code_groupe.toUpperCase().replace(/\s+/g, '') === String(seance.code_groupe || seance.id_groupe || '').toUpperCase().replace(/\s+/g, '')
+          )
+          if (!targetGroup) continue
+
+          const tsIdx = ['08:30', '11:00', '13:30', '16:00'].indexOf(seance.heure_debut)
+          if (tsIdx === -1) continue
+
+          const formateur = formateurs.find(f => 
+            (f.id && f.id === seance.id_formateur) ||
+            (f.nom_prenom && f.nom_prenom.toUpperCase().includes(String(seance.nom_formateur || seance.id_formateur || '').toUpperCase())) ||
+            (f.nom && f.nom.toUpperCase().includes(String(seance.nom_formateur || seance.id_formateur || '').toUpperCase()))
+          )
+          const salle = salles.find(s => 
+            (s.id && s.id === seance.id_salle) ||
+            s.nom_salle.toUpperCase() === String(seance.nom_salle || seance.id_salle || '').toUpperCase()
+          )
+
+          const nomFormateur = formateur
+            ? (formateur.nom && formateur.prenom ? `${formateur.nom} ${formateur.prenom}` : formateur.nom_prenom || formateur.nom || seance.id_formateur).toUpperCase()
+            : String(seance.nom_formateur || seance.id_formateur || '').toUpperCase()
+          const nomSalle = salle ? salle.nom_salle.toUpperCase() : String(seance.nom_salle || seance.id_salle || '').toUpperCase()
+
+          const jourUpper = (seance.jour || '').toUpperCase()
+          const cellData = { nomFormateur, nomSalle, module: seance.module_code || 'M' }
+
+          if (targetGroup.id) {
+            const idKey = `${jourUpper}__${targetGroup.id}__${tsIdx}`
+            if (!schedule[idKey]) schedule[idKey] = cellData
+          }
+          const codeKey = `${jourUpper}__${targetGroup.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`
+          if (!schedule[codeKey]) schedule[codeKey] = cellData
+        }
+      }
+
+      // 4. Process cached formateur timetables from localStorage (edt_prof_*)
+      for (let i = 0; i < localStorage.length; i++) {
+        const lk = localStorage.key(i)
+        if (!lk || !lk.startsWith('edt_prof_')) continue
+        try {
+          const profData = JSON.parse(localStorage.getItem(lk) || '{}')
+          const profNameRaw = lk.replace('edt_prof_', '').replace(/_/g, ' ')
+          const profObj = formateurs.find(f => 
+            (f.nom_prenom && f.nom_prenom.toUpperCase().includes(profNameRaw.toUpperCase())) ||
+            (f.nom && f.nom.toUpperCase().includes(profNameRaw.toUpperCase()))
+          )
+          const profName = profObj ? (profObj.nom_prenom || profObj.nom || profNameRaw).toUpperCase() : profNameRaw.toUpperCase()
+
+          for (const [slotKey, slotVal] of Object.entries(profData)) {
+            if (!slotVal || !(slotVal as any).groupe) continue
+            const [day, slotIdxStr] = slotKey.split('_')
+            const slotIdx = parseInt(slotIdxStr, 10)
+            if (isNaN(slotIdx) || slotIdx < 0 || slotIdx > 3) continue
+
+            const grpCode = String((slotVal as any).groupe).toUpperCase().replace(/\s+/g, '')
+            const targetGroup = sectionGroupes.find(g => g.code_groupe.toUpperCase().replace(/\s+/g, '') === grpCode)
+            if (!targetGroup) continue
+
+            const jourUpper = day.toUpperCase()
+            const salleName = String((slotVal as any).salle || '').toUpperCase()
+            const cellData = {
+              nomFormateur: profName,
+              nomSalle: salleName,
+              module: (slotVal as any).module || 'M'
+            }
+
+            const codeKey = `${jourUpper}__${targetGroup.code_groupe.toUpperCase().replace(/\s+/g, '')}__${slotIdx}`
+            if (!schedule[codeKey]) {
+              schedule[codeKey] = cellData
+              if (targetGroup.id) schedule[`${jourUpper}__${targetGroup.id}__${slotIdx}`] = cellData
+            }
+          }
+        } catch (e) {
+          // ignore cache error
         }
       }
 
@@ -259,6 +375,75 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       console.error(err)
       toast.error('Erreur lors du chargement du planning de la section')
       setSelectedSection(prev => prev ? { ...prev, loading: false } : null)
+    }
+  }
+
+  // ── Handle Save Section Cell (Synchronized with Planning Salles) ───────────
+  async function handleSaveSectionCell() {
+    if (!sectionCellModal || !selectedSection) return
+    const { jour, groupe, tsIdx, formateur, salle, module } = sectionCellModal
+    const jourUpper = jour.toUpperCase()
+    const salleUpper = salle.toUpperCase().trim()
+
+    try {
+      if (salleUpper) {
+        const planningKey = `${jourUpper}__${salleUpper}__${tsIdx}`
+        await planningSallesService.setCell({
+          key: planningKey,
+          formateurId: formateur.trim() || 'Formateur',
+          groupeId: groupe.code_groupe,
+          module: module.trim() || 'M'
+        })
+      }
+
+      const cellData = {
+        nomFormateur: formateur.toUpperCase().trim(),
+        nomSalle: salleUpper,
+        module: module.trim() || 'M'
+      }
+
+      setSelectedSection(prev => {
+        if (!prev) return null
+        const nextSched = { ...prev.schedule }
+        if (groupe.id) nextSched[`${jourUpper}__${groupe.id}__${tsIdx}`] = cellData
+        nextSched[`${jourUpper}__${groupe.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`] = cellData
+        return { ...prev, schedule: nextSched }
+      })
+
+      setSectionCellModal(null)
+      toast.success('✅ Séance enregistrée et synchronisée avec le Planning des Salles !')
+    } catch (e) {
+      console.error(e)
+      toast.error('Erreur lors de la sauvegarde de la séance')
+    }
+  }
+
+  // ── Handle Clear Section Cell ───────────────────────────────────────────────
+  async function handleClearSectionCell() {
+    if (!sectionCellModal || !selectedSection) return
+    const { jour, groupe, tsIdx, salle } = sectionCellModal
+    const jourUpper = jour.toUpperCase()
+    const salleUpper = salle.toUpperCase().trim()
+
+    try {
+      if (salleUpper) {
+        const planningKey = `${jourUpper}__${salleUpper}__${tsIdx}`
+        await planningSallesService.deleteCell(planningKey)
+      }
+
+      setSelectedSection(prev => {
+        if (!prev) return null
+        const nextSched = { ...prev.schedule }
+        if (groupe.id) delete nextSched[`${jourUpper}__${groupe.id}__${tsIdx}`]
+        delete nextSched[`${jourUpper}__${groupe.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`]
+        return { ...prev, schedule: nextSched }
+      })
+
+      setSectionCellModal(null)
+      toast.success('Séance vidée avec succès')
+    } catch (e) {
+      console.error(e)
+      toast.error('Erreur lors de la suppression')
     }
   }
 
@@ -648,23 +833,99 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                             </td>
                             {/* 4 time-slot cells */}
                             {[0, 1, 2, 3].map(tsIdx => {
-                              const key = `${jour}__${groupe.id}__${tsIdx}`
-                              const cell = selectedSection.schedule[key]
-                              if (isEnStage) {
+                              const jourUpper = jour.toUpperCase()
+                              const keyWithId = groupe.id ? `${jourUpper}__${groupe.id}__${tsIdx}` : ''
+                              const keyWithCode = `${jourUpper}__${groupe.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`
+                              const cell = (keyWithId && selectedSection.schedule[keyWithId]) || selectedSection.schedule[keyWithCode]
+
+                              // 1. If an actual session exists, ALWAYS show it!
+                              if (cell && (cell.nomFormateur || cell.nomSalle)) {
                                 return (
-                                  <td key={tsIdx} style={{ border: '1.5px solid #000', textAlign: 'center', fontSize: 11, fontStyle: 'italic', fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '6px 4px' }}>
-                                    Stage
-                                  </td>
-                                )
-                              }
-                              if (cell) {
-                                return (
-                                  <td key={tsIdx} style={{ border: '1.5px solid #000', textAlign: 'center', fontSize: 11, padding: '6px 4px', fontWeight: 800, color: '#7a1c00', background: '#ffccbc' }}>
+                                  <td
+                                    key={tsIdx}
+                                    onClick={() => setSectionCellModal({
+                                      jour,
+                                      groupe,
+                                      tsIdx,
+                                      formateur: cell.nomFormateur,
+                                      salle: cell.nomSalle,
+                                      module: cell.module || 'M'
+                                    })}
+                                    style={{
+                                      border: '1.5px solid #000',
+                                      textAlign: 'center',
+                                      fontSize: 11,
+                                      padding: '6px 4px',
+                                      fontWeight: 800,
+                                      color: '#7a1c00',
+                                      background: '#ffccbc',
+                                      cursor: 'pointer',
+                                      transition: 'background 0.15s'
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = '#ffab91' }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = '#ffccbc' }}
+                                    title={`Séance: ${cell.nomFormateur} - ${cell.nomSalle} (Cliquer pour modifier)`}
+                                  >
                                     {cell.nomFormateur} - {cell.nomSalle}
                                   </td>
                                 )
                               }
-                              return <td key={tsIdx} style={{ border: '1px solid #bbb', background: '#fff', padding: '6px 4px' }} />
+
+                              // 2. If group is in stage, show "Stage"
+                              if (isEnStage) {
+                                return (
+                                  <td
+                                    key={tsIdx}
+                                    onClick={() => setSectionCellModal({
+                                      jour,
+                                      groupe,
+                                      tsIdx,
+                                      formateur: '',
+                                      salle: '',
+                                      module: 'M'
+                                    })}
+                                    style={{
+                                      border: '1.5px solid #000',
+                                      textAlign: 'center',
+                                      fontSize: 11,
+                                      fontStyle: 'italic',
+                                      fontWeight: 700,
+                                      color: '#92400e',
+                                      background: '#fef3c7',
+                                      padding: '6px 4px',
+                                      cursor: 'pointer'
+                                    }}
+                                    title="En stage (Cliquer pour assigner une séance)"
+                                  >
+                                    Stage
+                                  </td>
+                                )
+                              }
+
+                              // 3. Otherwise empty cell
+                              return (
+                                <td
+                                  key={tsIdx}
+                                  onClick={() => setSectionCellModal({
+                                    jour,
+                                    groupe,
+                                    tsIdx,
+                                    formateur: '',
+                                    salle: '',
+                                    module: 'M'
+                                  })}
+                                  style={{
+                                    border: '1px solid #bbb',
+                                    background: '#fff',
+                                    padding: '6px 4px',
+                                    cursor: 'pointer',
+                                    transition: 'background 0.15s'
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9' }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff' }}
+                                  title="Cliquer pour ajouter une séance"
+                                />
+                              )
                             })}
                           </tr>
                         )
@@ -694,6 +955,113 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
             <div style={{ fontWeight: 900, fontSize: 13 }}>Directeur du Complexe</div>
           </div>
         </div>
+
+        {/* Section Cell Edit Modal */}
+        {sectionCellModal && (
+          <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setSectionCellModal(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460, padding: '24px 28px' }}>
+              <div className="modal-header" style={{ marginBottom: 16 }}>
+                <h3 className="modal-title" style={{ fontSize: 18, fontWeight: 800 }}>
+                  Modifier la séance ({sectionCellModal.jour} - {TS_LABELS[sectionCellModal.tsIdx]})
+                </h3>
+                <button className="modal-close" onClick={() => setSectionCellModal(null)}>×</button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Groupe</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={sectionCellModal.groupe.code_groupe}
+                    disabled
+                    style={{ background: '#f1f5f9', fontWeight: 800 }}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Formateur</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Nom du formateur..."
+                    value={sectionCellModal.formateur}
+                    onChange={(e) => setSectionCellModal(prev => prev ? { ...prev, formateur: e.target.value.toUpperCase() } : null)}
+                    list="section-formateurs-list"
+                    autoFocus
+                  />
+                  <datalist id="section-formateurs-list">
+                    {formateurs.map(f => {
+                      const name = (f.nom || f.nom_prenom || '').toUpperCase()
+                      return <option key={f.id} value={name} />
+                    })}
+                  </datalist>
+                  {formateurs.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, maxHeight: 80, overflowY: 'auto' }}>
+                      {formateurs.slice(0, 10).map(f => {
+                        const name = (f.nom || f.nom_prenom || '').toUpperCase()
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setSectionCellModal(prev => prev ? { ...prev, formateur: name } : null)}
+                            style={{ padding: '2px 8px', fontSize: 11, background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer' }}
+                          >
+                            {name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Salle / Atelier</label>
+                  <select
+                    className="form-select"
+                    value={sectionCellModal.salle}
+                    onChange={(e) => setSectionCellModal(prev => prev ? { ...prev, salle: e.target.value } : null)}
+                  >
+                    <option value="">-- Sans salle --</option>
+                    {salles.map(s => (
+                      <option key={s.id} value={s.nom_salle}>{s.nom_salle} ({s.type_salle})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Module</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Ex: M"
+                    value={sectionCellModal.module}
+                    onChange={(e) => setSectionCellModal(prev => prev ? { ...prev, module: e.target.value } : null)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleClearSectionCell}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px' }}
+                >
+                  <Trash2 size={16} /> Vider
+                </button>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setSectionCellModal(null)}>
+                    Annuler
+                  </button>
+                  <button type="button" className="btn btn-primary" onClick={handleSaveSectionCell}>
+                    Enregistrer
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
