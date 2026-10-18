@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, Edit, AlertTriangle, FileSpreadsheet, Download, CheckCircle2 } from 'lucide-react'
+import { Plus, Trash2, Edit, AlertTriangle, FileSpreadsheet, Download, CheckCircle2, Search, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
 import { formateursService } from '../services/firebaseService'
@@ -12,6 +12,9 @@ export default function FormateursPage(): React.ReactElement {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const { lang } = useTranslation()
+
+  // Quick Search state
+  const [searchTerm, setSearchTerm] = useState('')
 
   // Form state
   const [matricule, setMatricule] = useState('')
@@ -380,6 +383,22 @@ export default function FormateursPage(): React.ReactElement {
     }
   }
 
+  // Filter formateurs by nom, prénom, or matricule
+  const filteredFormateurs = formateurs.filter((f) => {
+    if (!searchTerm.trim()) return true
+    const term = searchTerm.toLowerCase().trim()
+    const prenomVal = (f.prenom ?? f.nom_prenom.split(' ')[0] ?? '').toLowerCase()
+    const nomVal = (f.nom ?? f.nom_prenom.split(' ').slice(1).join(' ') ?? '').toLowerCase()
+    const fullName = (f.nom_prenom ?? `${prenomVal} ${nomVal}`).toLowerCase()
+    const matriculeVal = (f.matricule ?? '').toLowerCase()
+    return (
+      matriculeVal.includes(term) ||
+      prenomVal.includes(term) ||
+      nomVal.includes(term) ||
+      fullName.includes(term)
+    )
+  })
+
   return (
     <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Hidden File Input for Excel */}
@@ -413,14 +432,67 @@ export default function FormateursPage(): React.ReactElement {
                 letterSpacing: 0,
                 lineHeight: 1
               }}>
-                {formateurs.length}
+                {searchTerm ? `${filteredFormateurs.length} / ${formateurs.length}` : formateurs.length}
               </span>
             )}
           </h1>
           <p>{lang === 'ar' ? 'إضافة، تعديل، أو حذف بيانات المكونين (الأساتذة)' : 'Ajouter, modifier ou supprimer les formateurs'}</p>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Quick Search Input */}
+          <div style={{
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            background: '#ffffff',
+            border: '2px solid #e2e8f0',
+            borderRadius: 'var(--radius-md)',
+            padding: '8px 14px',
+            width: 280,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+            transition: 'border-color 0.2s'
+          }}>
+            <Search size={18} color="#64748b" style={{ marginInlineEnd: 8, flexShrink: 0 }} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={lang === 'ar' ? 'بحث سريع عن أستاذ...' : 'Recherche rapide formateur...'}
+              style={{
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                fontSize: 13,
+                fontWeight: 600,
+                width: '100%',
+                color: '#0f172a'
+              }}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                style={{
+                  border: 'none',
+                  background: '#f1f5f9',
+                  borderRadius: '50%',
+                  width: 22,
+                  height: 22,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  padding: 0,
+                  flexShrink: 0
+                }}
+                title={lang === 'ar' ? 'مسح' : 'Effacer'}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
           {/* Delete All Button */}
           {formateurs.length > 0 && (
             <button
@@ -546,6 +618,26 @@ export default function FormateursPage(): React.ReactElement {
                 </button>
               </div>
             </div>
+          ) : filteredFormateurs.length === 0 ? (
+            <div className="empty-state" style={{ padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ fontSize: 44, marginBottom: 14 }}>🔍</div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+                {lang === 'ar' ? `لا توجد نتائج مطابقة لـ "${searchTerm}"` : `Aucun formateur trouvé pour "${searchTerm}"`}
+              </h3>
+              <p style={{ fontSize: 14, color: '#6b7280', marginBottom: 20 }}>
+                {lang === 'ar'
+                  ? 'يرجى التأكد من كتابة الاسم، اللقب أو رقم التأجير بشكل صحيح'
+                  : 'Veuillez vérifier l\'orthographe du nom, prénom ou du matricule'}
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setSearchTerm('')}
+                style={{ padding: '9px 20px', fontSize: 13, fontWeight: 700 }}
+              >
+                {lang === 'ar' ? 'إعادة ضبط البحث' : 'Réinitialiser la recherche'}
+              </button>
+            </div>
           ) : (
             <div className="table-wrapper" style={{ margin: 0 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -558,7 +650,7 @@ export default function FormateursPage(): React.ReactElement {
                   </tr>
                 </thead>
                 <tbody>
-                  {formateurs.map((f, idx) => {
+                  {filteredFormateurs.map((f, idx) => {
                     const prenomVal = f.prenom ?? f.nom_prenom.split(' ')[0]
                     const nomVal = f.nom ?? f.nom_prenom.split(' ').slice(1).join(' ')
                     return (

@@ -6,7 +6,6 @@ import {
   DoorOpen,
   BookOpen,
   UsersRound,
-  Search,
   FileDown,
   Wifi,
   ChevronRight,
