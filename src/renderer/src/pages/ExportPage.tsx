@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { FileDown, Users, UsersRound, Search, FolderOpen, RefreshCw } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { FileDown, Users, UsersRound, Search, FolderOpen, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
-import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import {
   formateursService,
@@ -25,6 +24,16 @@ interface TimetableSlotData {
 const JOURS_LIST = ['LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI']
 const TS_LABELS = ['08H30 - 11H00', '11H00 - 13H30', '13H30 - 16H00', '16H00 - 18H30']
 
+// Preload OFPPT logo
+let cachedLogoImg: HTMLImageElement | null = null
+try {
+  const img = new Image()
+  img.src = ofpptLogo
+  img.onload = () => { cachedLogoImg = img }
+} catch (e) {
+  console.warn('Could not preload ofpptLogo', e)
+}
+
 export default function ExportPage(): React.ReactElement {
   const [formateurs, setFormateurs] = useState<Formateur[]>([])
   const [groupes, setGroupes] = useState<Groupe[]>([])
@@ -39,18 +48,8 @@ export default function ExportPage(): React.ReactElement {
   const [exportingId, setExportingId] = useState<string | null>(null)
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; label: string } | null>(null)
   const [lastExportPath, setLastExportPath] = useState<{ folderName: string; targetDir: string; filePath: string } | null>(null)
+  const [isIpcAvailable, setIsIpcAvailable] = useState<boolean>(true)
 
-  // Offscreen element for PDF rendering
-  const [printData, setPrintData] = useState<{
-    type: 'groupe' | 'formateur'
-    title: string
-    subTitle: string
-    codeOrName: string
-    meta: Record<string, string>
-    grid: Record<string, TimetableSlotData | null> // key: `${jour}__${slotIdx}`
-  } | null>(null)
-
-  const printSheetRef = useRef<HTMLDivElement>(null)
   const { lang } = useTranslation()
 
   // Load all necessary data from Firebase
@@ -83,7 +82,7 @@ export default function ExportPage(): React.ReactElement {
     loadData()
   }, [lang])
 
-  // Helper: Get schedule for a specific Groupe
+  // Helper: Build schedule for a specific Groupe
   function buildGroupeSchedule(targetGroupe: Groupe): Record<string, TimetableSlotData | null> {
     const grid: Record<string, TimetableSlotData | null> = {}
     const grpCodeNorm = targetGroupe.code_groupe.toUpperCase().replace(/\s+/g, '')
@@ -94,7 +93,7 @@ export default function ExportPage(): React.ReactElement {
       }
     })
 
-    // 1. From planning_salles (primary timetable source)
+    // 1. From planning_salles
     for (const [key, cell] of Object.entries(planningSallesMap)) {
       if (!cell || !cell.groupeId) continue
       const parts = key.split('__')
@@ -154,7 +153,7 @@ export default function ExportPage(): React.ReactElement {
     return grid
   }
 
-  // Helper: Get schedule for a specific Formateur
+  // Helper: Build schedule for a specific Formateur
   function buildFormateurSchedule(targetFormateur: Formateur): Record<string, TimetableSlotData | null> {
     const grid: Record<string, TimetableSlotData | null> = {}
     const profNameNorm = (targetFormateur.nom_prenom || `${targetFormateur.nom || ''} ${targetFormateur.prenom || ''}`).toUpperCase().trim()
@@ -220,94 +219,297 @@ export default function ExportPage(): React.ReactElement {
     return grid
   }
 
-  // Generate PDF from off-screen rendered DOM element
-  async function generateCurrentPdfBase64(): Promise<string> {
-    if (!printSheetRef.current) throw new Error('Print container ref not ready')
-
-    // Wait slightly for any font/image to settle
-    await new Promise(resolve => setTimeout(resolve, 80))
-
-    const canvas = await html2canvas(printSheetRef.current, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff'
-    })
-
-    const imgData = canvas.toDataURL('image/jpeg', 0.95)
-    const pdf = new jsPDF({
+  // ══════════════════════════════════════════════════════════════════════════
+  // NATIVE jsPDF GENERATOR: Instant, 100% Vector Quality, No DOM dependency
+  // ══════════════════════════════════════════════════════════════════════════
+  function generateTimetablePdf(
+    type: 'groupe' | 'formateur',
+    targetCodeOrName: string,
+    metaData: Record<string, string>,
+    grid: Record<string, TimetableSlotData | null>
+  ): jsPDF {
+    const doc = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
       format: 'a4'
     })
 
-    const pdfWidth = pdf.internal.pageSize.getWidth()   // 297mm
-    const pdfHeight = pdf.internal.pageSize.getHeight() // 210mm
+    // Dimensions
+    const pageWidth = 297
+    const pageHeight = 210
     const margin = 8
-    const availWidth = pdfWidth - margin * 2
-    const availHeight = pdfHeight - margin * 2
+    const contentWidth = pageWidth - margin * 2 // 281mm
 
-    const imgProps = pdf.getImageProperties(imgData)
-    const ratio = imgProps.width / imgProps.height
+    // ── Outer Border ──
+    doc.setDrawColor(0, 0, 0)
+    doc.setLineWidth(0.6)
+    doc.rect(margin, margin, contentWidth, pageHeight - margin * 2)
 
-    let renderWidth = availWidth
-    let renderHeight = renderWidth / ratio
+    // ── Header Box ──
+    doc.line(margin, 26, margin + contentWidth, 26)
 
-    if (renderHeight > availHeight) {
-      renderHeight = availHeight
-      renderWidth = renderHeight * ratio
+    // Logo (if loaded)
+    if (cachedLogoImg && cachedLogoImg.complete && cachedLogoImg.naturalWidth > 0) {
+      try {
+        doc.addImage(cachedLogoImg, 'JPEG', margin + 3, margin + 1.5, 22, 15)
+      } catch (err) {
+        // Fallback badge if image load issue
+        doc.setFillColor(15, 118, 110)
+        doc.roundedRect(margin + 3, margin + 2, 22, 14, 2, 2, 'F')
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8.5)
+        doc.setTextColor(255, 255, 255)
+        doc.text('OFPPT', margin + 14, margin + 10.5, { align: 'center' })
+      }
+    } else {
+      doc.setFillColor(15, 118, 110)
+      doc.roundedRect(margin + 3, margin + 2, 22, 14, 2, 2, 'F')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      doc.setTextColor(255, 255, 255)
+      doc.text('OFPPT', margin + 14, margin + 10.5, { align: 'center' })
     }
 
-    const x = margin + (availWidth - renderWidth) / 2
-    const y = margin + (availHeight - renderHeight) / 2
+    // Header Vertical Divider
+    doc.line(margin + 28, margin, margin + 28, 26)
 
-    pdf.addImage(imgData, 'JPEG', x, y, renderWidth, renderHeight)
-    const dataUri = pdf.output('datauristring')
-    return dataUri.split(',')[1]
+    // Header Text
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(51, 65, 85)
+    doc.text('ROYAUME DU MAROC  •  OFPPT  •  ISTA / CFP', margin + 32, margin + 5)
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(15)
+    doc.setTextColor(15, 23, 42)
+    const titleText = type === 'groupe'
+      ? `EMPLOI DU TEMPS DU GROUPE : ${targetCodeOrName}`
+      : `EMPLOI DU TEMPS DU FORMATEUR : ${targetCodeOrName}`
+    doc.text(titleText, margin + 32, margin + 12)
+
+    // Year
+    const anneeFormation = type === 'groupe'
+      ? (localStorage.getItem('annee_formation_groupe') || '2026/2027')
+      : (localStorage.getItem('annee_formation_formateur') || '2026/2027')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10.5)
+    doc.setTextColor(15, 118, 110)
+    doc.text(`ANNEE DE FORMATION : ${anneeFormation}`, margin + contentWidth - 4, margin + 12, { align: 'right' })
+
+    // ── Metadata Grid ──
+    const metaY = 27
+    const metaHeight = 15
+    doc.line(margin, metaY + metaHeight, margin + contentWidth, metaY + metaHeight)
+
+    doc.setFontSize(8.5)
+    const colWidth = contentWidth / 3
+    let metaIdx = 0
+
+    const entries = Object.entries(metaData)
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 3; c++) {
+        const item = entries[metaIdx]
+        if (item) {
+          const posX = margin + 4 + c * colWidth
+          const posY = metaY + 5.5 + r * 6.5
+
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(15, 23, 42)
+          doc.text(`${item[0]} :`, posX, posY)
+
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(51, 65, 85)
+          const offsetKey = doc.getTextWidth(`${item[0]} : `)
+          doc.text(item[1] || '—', posX + offsetKey + 1, posY)
+        }
+        metaIdx++
+      }
+    }
+
+    // ── Weekly Schedule Table ──
+    const tableTop = metaY + metaHeight // 42mm
+    const dayColWidth = 33              // 33mm for day column
+    const slotColWidth = (contentWidth - dayColWidth) / 4 // 62mm per slot
+    const headerRowHeight = 9
+    const dayRowHeight = 22             // 22mm per day row (6 * 22 = 132mm)
+
+    // Table Header Background
+    doc.setFillColor(229, 231, 235)
+    doc.rect(margin, tableTop, contentWidth, headerRowHeight, 'FD')
+
+    // Header Day Column
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(15, 23, 42)
+    doc.text('JOUR / CRÉNEAU', margin + dayColWidth / 2, tableTop + 6, { align: 'center' })
+    doc.line(margin + dayColWidth, tableTop, margin + dayColWidth, tableTop + headerRowHeight)
+
+    // Header Time Slots
+    TS_LABELS.forEach((lbl, i) => {
+      const slotX = margin + dayColWidth + i * slotColWidth
+      doc.text(lbl, slotX + slotColWidth / 2, tableTop + 6, { align: 'center' })
+      if (i > 0) {
+        doc.line(slotX, tableTop, slotX, tableTop + headerRowHeight)
+      }
+    })
+
+    // ── Table Rows (6 Days) ──
+    JOURS_LIST.forEach((jour, jourIdx) => {
+      const rowY = tableTop + headerRowHeight + jourIdx * dayRowHeight
+
+      // Day Column Background & Label
+      doc.setFillColor(243, 244, 246)
+      doc.rect(margin, rowY, dayColWidth, dayRowHeight, 'FD')
+
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10.5)
+      doc.setTextColor(15, 23, 42)
+      doc.text(jour, margin + dayColWidth / 2, rowY + dayRowHeight / 2 + 1.5, { align: 'center' })
+
+      // Vertical line after day
+      doc.line(margin + dayColWidth, rowY, margin + dayColWidth, rowY + dayRowHeight)
+
+      // Time Slots
+      for (let slotIdx = 0; slotIdx < 4; slotIdx++) {
+        const slotX = margin + dayColWidth + slotIdx * slotColWidth
+        const cell = grid[`${jour}__${slotIdx}`]
+
+        if (cell) {
+          // Occupied Slot: Light Emerald Background
+          doc.setFillColor(240, 253, 244)
+          doc.rect(slotX, rowY, slotColWidth, dayRowHeight, 'FD')
+
+          // 1. Module (bold emerald)
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(11)
+          doc.setTextColor(6, 95, 70)
+          doc.text(cell.module, slotX + slotColWidth / 2, rowY + 6.5, { align: 'center' })
+
+          // 2. Prof / Groupe (bold slate)
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(9.5)
+          doc.setTextColor(15, 23, 42)
+          const midLabel = type === 'groupe' ? cell.formateur : cell.groupe
+          // Truncate if too long
+          const truncatedLabel = midLabel.length > 25 ? `${midLabel.substring(0, 23)}...` : midLabel
+          doc.text(truncatedLabel, slotX + slotColWidth / 2, rowY + 12.5, { align: 'center' })
+
+          // 3. Salle Badge
+          doc.setFillColor(226, 232, 240)
+          const badgeWidth = Math.min(slotColWidth - 14, 34)
+          doc.roundedRect(slotX + (slotColWidth - badgeWidth) / 2, rowY + 15, badgeWidth, 5, 1, 1, 'F')
+
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(8)
+          doc.setTextColor(51, 65, 85)
+          doc.text(cell.salle, slotX + slotColWidth / 2, rowY + 18.7, { align: 'center' })
+        } else {
+          // Empty Slot
+          doc.setFillColor(255, 255, 255)
+          doc.rect(slotX, rowY, slotColWidth, dayRowHeight, 'FD')
+
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(10)
+          doc.setTextColor(203, 213, 225)
+          doc.text('—', slotX + slotColWidth / 2, rowY + dayRowHeight / 2 + 1, { align: 'center' })
+        }
+
+        // Slot Vertical Divider
+        if (slotIdx > 0) {
+          doc.line(slotX, rowY, slotX, rowY + dayRowHeight)
+        }
+      }
+
+      // Horizontal line after each day
+      doc.line(margin, rowY + dayRowHeight, margin + contentWidth, rowY + dayRowHeight)
+    })
+
+    // ── Signatures Footer ──
+    const footerY = tableTop + headerRowHeight + 6 * dayRowHeight + 3 // ~186mm
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8.5)
+    doc.setTextColor(15, 23, 42)
+
+    doc.text('Visa du Formateur / Coordinateur Pédagogique', margin + 45, footerY + 5, { align: 'center' })
+    doc.text("Visa du Directeur du Complexe / Chef d'Établissement", margin + contentWidth - 45, footerY + 5, { align: 'center' })
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(100, 116, 139)
+    doc.text(`Document généré le ${new Date().toLocaleDateString('fr-FR')} • Système de Gestion des Emplois du Temps OFPPT`, margin + contentWidth / 2, footerY + 11, { align: 'center' })
+
+    return doc
   }
 
-  // Save PDF directly to Desktop inside the specified folder
-  async function saveToDesktop(folderName: string, fileName: string, base64Data: string) {
-    if ((window as any).api?.savePdfToDesktop) {
-      return await (window as any).api.savePdfToDesktop({ folderName, fileName, base64Data })
-    } else if ((window as any).electron?.ipcRenderer?.invoke) {
-      return await (window as any).electron.ipcRenderer.invoke('save-pdf-to-desktop', { folderName, fileName, base64Data })
-    } else {
-      // Browser fallback (download directly)
-      const byteCharacters = atob(base64Data)
-      const byteNumbers = new Array(byteCharacters.length)
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i)
+  // ══════════════════════════════════════════════════════════════════════════
+  // Bulletproof Save: Tries Desktop IPC first, with seamless browser fallback
+  // ══════════════════════════════════════════════════════════════════════════
+  async function savePdfFile(folderName: string, fileName: string, doc: jsPDF) {
+    const base64Data = doc.output('datauristring').split(',')[1]
+
+    // 1. Try Desktop IPC in Electron
+    let ipcResult: any = null
+    try {
+      if ((window as any).api?.savePdfToDesktop) {
+        ipcResult = await (window as any).api.savePdfToDesktop({ folderName, fileName, base64Data })
+      } else if ((window as any).electron?.ipcRenderer?.invoke) {
+        ipcResult = await (window as any).electron.ipcRenderer.invoke('save-pdf-to-desktop', { folderName, fileName, base64Data })
       }
-      const byteArray = new Uint8Array(byteNumbers)
-      const blob = new Blob([byteArray], { type: 'application/pdf' })
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = fileName
-      link.click()
-      return { success: true, filePath: fileName, folderName, targetDir: 'Téléchargements' }
+    } catch (ipcErr: any) {
+      console.warn('Electron IPC save not ready or failed:', ipcErr)
+      setIsIpcAvailable(false)
+    }
+
+    if (ipcResult && ipcResult.success) {
+      return {
+        success: true,
+        desktopSaved: true,
+        folderName: ipcResult.folderName || folderName,
+        targetDir: ipcResult.targetDir || folderName,
+        filePath: ipcResult.filePath || fileName
+      }
+    }
+
+    // 2. Fallback: Save directly via browser download
+    try {
+      doc.save(fileName)
+      return {
+        success: true,
+        desktopSaved: false,
+        folderName,
+        targetDir: 'Téléchargements',
+        filePath: fileName
+      }
+    } catch (saveErr) {
+      console.error('doc.save error:', saveErr)
+      return {
+        success: false,
+        error: String(saveErr)
+      }
     }
   }
 
   // Open the created desktop folder
   async function handleOpenFolder(targetDir: string) {
-    if ((window as any).api?.openDesktopFolder) {
-      await (window as any).api.openDesktopFolder(targetDir)
-    } else if ((window as any).electron?.ipcRenderer?.invoke) {
-      await (window as any).electron.ipcRenderer.invoke('open-desktop-folder', targetDir)
-    } else {
-      toast('تم الحفظ في جهازك بنجاح', { icon: '📁' })
+    try {
+      if ((window as any).api?.openDesktopFolder) {
+        await (window as any).api.openDesktopFolder(targetDir)
+      } else if ((window as any).electron?.ipcRenderer?.invoke) {
+        await (window as any).electron.ipcRenderer.invoke('open-desktop-folder', targetDir)
+      } else {
+        toast.success(lang === 'ar' ? 'تم حفظ الملف في جهازك بنجاح' : 'Fichier enregistré avec succès')
+      }
+    } catch (e) {
+      toast.success(lang === 'ar' ? 'تم حفظ الملف في جهازك بنجاح' : 'Fichier enregistré avec succès')
     }
   }
 
-  // Export single Groupe
+  // ══════════════════════════════════════════════════════════════════════════
+  // EXPORT SINGLE GROUPE
+  // ══════════════════════════════════════════════════════════════════════════
   async function exportSingleGroupe(groupe: Groupe) {
     try {
       setExportingId(groupe.id || groupe.code_groupe)
-      toast.loading(
-        lang === 'ar' ? `جاري إنشاء جدول الفوج ${groupe.code_groupe}...` : `Génération du planning ${groupe.code_groupe}...`,
-        { id: 'export-toast' }
-      )
 
       const grid = buildGroupeSchedule(groupe)
       const filiereObj = filieres.find(f => f.id === groupe.id_filiere || f.code_filiere === groupe.filiere)
@@ -315,164 +517,166 @@ export default function ExportPage(): React.ReactElement {
       const anneeFormation = localStorage.getItem('annee_formation_groupe') || '2026/2027'
       const periode = localStorage.getItem('periode_application_groupe') || 'Du 01/09/2026 au 30/06/2027'
 
-      setPrintData({
-        type: 'groupe',
-        title: 'EMPLOI DU TEMPS DU GROUPE',
-        subTitle: `ANNEE DE FORMATION : ${anneeFormation}`,
-        codeOrName: groupe.code_groupe,
-        meta: {
-          'DRGC': 'Direction Régionale Grand Casablanca',
-          'Complexe/EFP': 'CFP IMME / ISTA MY RACHID',
-          'Filière': filiereObj ? `${filiereObj.code_filiere} - ${filiereObj.nom_filiere}` : (groupe.filiere || 'Filière'),
-          'Groupe': groupe.code_groupe,
-          'Niveau': anneeLabel,
-          'Période': periode,
-          'Mode de formation': 'FPA / Résidentiel'
-        },
-        grid
-      })
+      const meta = {
+        'DRGC': 'Direction Régionale Grand Casablanca',
+        'Complexe/EFP': 'CFP IMME / ISTA MY RACHID',
+        'Filière': filiereObj ? `${filiereObj.code_filiere} - ${filiereObj.nom_filiere}` : (groupe.filiere || 'Filière'),
+        'Groupe': groupe.code_groupe,
+        'Niveau': anneeLabel,
+        'Période': periode,
+        'Mode de formation': 'FPA / Résidentiel'
+      }
 
-      // Wait a tick for state to render into print ref
-      await new Promise(r => setTimeout(r, 120))
+      // Generate PDF natively (takes ~15ms)
+      const doc = generateTimetablePdf('groupe', groupe.code_groupe, meta, grid)
 
-      const base64Data = await generateCurrentPdfBase64()
       const folderName = groupe.code_groupe.trim()
-      const fileName = `${groupe.code_groupe.trim()}_Emploi_du_Temps.pdf`
+      const fileName = `${folderName}_Emploi_du_Temps.pdf`
 
-      const saveResult = await saveToDesktop(folderName, fileName, base64Data)
+      const saveResult = await savePdfFile(folderName, fileName, doc)
 
       if (saveResult && saveResult.success) {
-        setLastExportPath({
-          folderName: saveResult.folderName || folderName,
-          targetDir: saveResult.targetDir || folderName,
-          filePath: saveResult.filePath || fileName
-        })
+        if (saveResult.desktopSaved) {
+          setLastExportPath({
+            folderName: saveResult.folderName,
+            targetDir: saveResult.targetDir,
+            filePath: saveResult.filePath
+          })
 
-        toast.success(
-          (t) => (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontWeight: 700 }}>
-                {lang === 'ar'
-                  ? `تم حفظ ملف الفوج (${folderName}) بنجاح!`
-                  : `Planning du groupe (${folderName}) sauvegardé !`}
+          toast.success(
+            (t) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>
+                  {lang === 'ar'
+                    ? `تم حفظ ملف الفوج (${folderName}) على سطح المكتب!`
+                    : `Planning du groupe (${folderName}) sauvegardé !`}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {lang === 'ar'
+                    ? `سطح المكتب > مجلد [${folderName}] > ${fileName}`
+                    : `Bureau > Dossier [${folderName}] > ${fileName}`}
+                </div>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ marginTop: 4, alignSelf: 'flex-start', padding: '4px 10px', fontSize: 12, gap: 5 }}
+                  onClick={() => {
+                    toast.dismiss(t.id)
+                    handleOpenFolder(saveResult.targetDir)
+                  }}
+                >
+                  <FolderOpen size={14} />
+                  {lang === 'ar' ? 'فتح المجلد على سطح المكتب' : 'Ouvrir le dossier sur le Bureau'}
+                </button>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {lang === 'ar'
-                  ? `سطح المكتب > مجلد [${folderName}] > ${fileName}`
-                  : `Bureau > Dossier [${folderName}] > ${fileName}`}
-              </div>
-              <button
-                className="btn btn-secondary btn-sm"
-                style={{ marginTop: 4, alignSelf: 'flex-start', padding: '4px 10px', fontSize: 12, gap: 5 }}
-                onClick={() => {
-                  toast.dismiss(t.id)
-                  if (saveResult.targetDir) handleOpenFolder(saveResult.targetDir)
-                }}
-              >
-                <FolderOpen size={14} />
-                {lang === 'ar' ? 'فتح المجلد على سطح المكتب' : 'Ouvrir le dossier sur le Bureau'}
-              </button>
-            </div>
-          ),
-          { id: 'export-toast', duration: 7000 }
-        )
+            ),
+            { duration: 7000 }
+          )
+        } else {
+          toast.success(
+            lang === 'ar'
+              ? `تم تنزيل جدول الفوج (${folderName}) بنجاح! تم حفظ الملف باسم ${fileName}`
+              : `Planning du groupe (${folderName}) téléchargé avec succès !`,
+            { duration: 5000 }
+          )
+        }
       } else {
-        toast.error(lang === 'ar' ? 'حدث خطأ أثناء حفظ الملف على سطح المكتب' : 'Erreur lors de la sauvegarde sur le Bureau', { id: 'export-toast' })
+        toast.error(lang === 'ar' ? 'حدث خطأ أثناء حفظ الملف' : 'Erreur lors de la sauvegarde du fichier')
       }
     } catch (err: any) {
-      console.error(err)
-      toast.error(lang === 'ar' ? 'فشل التصدير' : 'Échec de l\'exportation', { id: 'export-toast' })
+      console.error('exportSingleGroupe error:', err)
+      toast.error(lang === 'ar' ? `فشل التصدير: ${err?.message || ''}` : `Échec: ${err?.message || ''}`)
     } finally {
       setExportingId(null)
     }
   }
 
-  // Export single Formateur
+  // ══════════════════════════════════════════════════════════════════════════
+  // EXPORT SINGLE FORMATEUR
+  // ══════════════════════════════════════════════════════════════════════════
   async function exportSingleFormateur(formateur: Formateur) {
     try {
       const profName = formateur.nom_prenom || `${formateur.nom || ''} ${formateur.prenom || ''}`.trim() || 'Formateur'
       setExportingId(formateur.id || profName)
-      toast.loading(
-        lang === 'ar' ? `جاري إنشاء جدول الأستاذ ${profName}...` : `Génération du planning ${profName}...`,
-        { id: 'export-toast' }
-      )
 
       const grid = buildFormateurSchedule(formateur)
       const anneeFormation = localStorage.getItem('annee_formation_formateur') || '2026/2027'
       const periode = localStorage.getItem('periode_application_formateur') || 'Du 01/09/2026 au 30/06/2027'
 
-      setPrintData({
-        type: 'formateur',
-        title: 'EMPLOI DU TEMPS DU FORMATEUR',
-        subTitle: `ANNEE DE FORMATION : ${anneeFormation}`,
-        codeOrName: profName,
-        meta: {
-          'DRGC': 'Direction Régionale Grand Casablanca',
-          'Complexe/EFP': 'CFP IMME / ISTA MY RACHID',
-          'Formateur': profName,
-          'Matricule': formateur.matricule || '-',
-          'Spécialité': formateur.specialite || formateur.matiere || 'Technique',
-          'Période': periode,
-          'Statut': 'Statutaire'
-        },
-        grid
-      })
+      const meta = {
+        'DRGC': 'Direction Régionale Grand Casablanca',
+        'Complexe/EFP': 'CFP IMME / ISTA MY RACHID',
+        'Formateur': profName,
+        'Matricule': formateur.matricule || '-',
+        'Spécialité': formateur.specialite || formateur.matiere || 'Technique',
+        'Période': periode,
+        'Statut': 'Statutaire'
+      }
 
-      await new Promise(r => setTimeout(r, 120))
+      const doc = generateTimetablePdf('formateur', profName, meta, grid)
 
-      const base64Data = await generateCurrentPdfBase64()
       const folderName = profName.replace(/[\\/:*?"<>|]/g, '_').trim()
       const fileName = `${folderName}_Emploi_du_Temps.pdf`
 
-      const saveResult = await saveToDesktop(folderName, fileName, base64Data)
+      const saveResult = await savePdfFile(folderName, fileName, doc)
 
       if (saveResult && saveResult.success) {
-        setLastExportPath({
-          folderName: saveResult.folderName || folderName,
-          targetDir: saveResult.targetDir || folderName,
-          filePath: saveResult.filePath || fileName
-        })
+        if (saveResult.desktopSaved) {
+          setLastExportPath({
+            folderName: saveResult.folderName,
+            targetDir: saveResult.targetDir,
+            filePath: saveResult.filePath
+          })
 
-        toast.success(
-          (t) => (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontWeight: 700 }}>
-                {lang === 'ar'
-                  ? `تم حفظ ملف الأستاذ (${folderName}) بنجاح!`
-                  : `Planning du formateur (${folderName}) sauvegardé !`}
+          toast.success(
+            (t) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>
+                  {lang === 'ar'
+                    ? `تم حفظ ملف الأستاذ (${folderName}) على سطح المكتب!`
+                    : `Planning du formateur (${folderName}) sauvegardé !`}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {lang === 'ar'
+                    ? `سطح المكتب > مجلد [${folderName}] > ${fileName}`
+                    : `Bureau > Dossier [${folderName}] > ${fileName}`}
+                </div>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ marginTop: 4, alignSelf: 'flex-start', padding: '4px 10px', fontSize: 12, gap: 5 }}
+                  onClick={() => {
+                    toast.dismiss(t.id)
+                    handleOpenFolder(saveResult.targetDir)
+                  }}
+                >
+                  <FolderOpen size={14} />
+                  {lang === 'ar' ? 'فتح المجلد على سطح المكتب' : 'Ouvrir le dossier sur le Bureau'}
+                </button>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {lang === 'ar'
-                  ? `سطح المكتب > مجلد [${folderName}] > ${fileName}`
-                  : `Bureau > Dossier [${folderName}] > ${fileName}`}
-              </div>
-              <button
-                className="btn btn-secondary btn-sm"
-                style={{ marginTop: 4, alignSelf: 'flex-start', padding: '4px 10px', fontSize: 12, gap: 5 }}
-                onClick={() => {
-                  toast.dismiss(t.id)
-                  if (saveResult.targetDir) handleOpenFolder(saveResult.targetDir)
-                }}
-              >
-                <FolderOpen size={14} />
-                {lang === 'ar' ? 'فتح المجلد على سطح المكتب' : 'Ouvrir le dossier sur le Bureau'}
-              </button>
-            </div>
-          ),
-          { id: 'export-toast', duration: 7000 }
-        )
+            ),
+            { duration: 7000 }
+          )
+        } else {
+          toast.success(
+            lang === 'ar'
+              ? `تم تنزيل جدول الأستاذ (${folderName}) بنجاح!`
+              : `Planning du formateur (${folderName}) téléchargé avec succès !`,
+            { duration: 5000 }
+          )
+        }
       } else {
-        toast.error(lang === 'ar' ? 'حدث خطأ أثناء حفظ الملف' : 'Erreur de sauvegarde', { id: 'export-toast' })
+        toast.error(lang === 'ar' ? 'حدث خطأ أثناء حفظ الملف' : 'Erreur de sauvegarde')
       }
-    } catch (err) {
-      console.error(err)
-      toast.error(lang === 'ar' ? 'فشل التصدير' : 'Échec de l\'exportation', { id: 'export-toast' })
+    } catch (err: any) {
+      console.error('exportSingleFormateur error:', err)
+      toast.error(lang === 'ar' ? `فشل التصدير: ${err?.message || ''}` : `Échec: ${err?.message || ''}`)
     } finally {
       setExportingId(null)
     }
   }
 
-  // Export ALL Groupes (Global) - Each in its own desktop folder
+  // ══════════════════════════════════════════════════════════════════════════
+  // EXPORT ALL GROUPES (GLOBAL)
+  // ══════════════════════════════════════════════════════════════════════════
   async function exportAllGroupes() {
     if (groupes.length === 0) {
       toast.error(lang === 'ar' ? 'لا توجد أفواج للتصدير' : 'Aucun groupe à exporter')
@@ -482,13 +686,16 @@ export default function ExportPage(): React.ReactElement {
     try {
       setBulkProgress({ current: 0, total: groupes.length, label: 'Démarrage de l\'exportation...' })
       let exportedCount = 0
+      let desktopSavedCount = 0
 
       for (let i = 0; i < groupes.length; i++) {
         const g = groupes[i]
         setBulkProgress({
           current: i + 1,
           total: groupes.length,
-          label: lang === 'ar' ? `جاري معالجة الفوج ${g.code_groupe} (${i + 1}/${groupes.length})...` : `Traitement du groupe ${g.code_groupe} (${i + 1}/${groupes.length})...`
+          label: lang === 'ar'
+            ? `جاري تصدير الفوج ${g.code_groupe} (${i + 1}/${groupes.length})...`
+            : `Export du groupe ${g.code_groupe} (${i + 1}/${groupes.length})...`
         })
 
         const grid = buildGroupeSchedule(g)
@@ -497,46 +704,56 @@ export default function ExportPage(): React.ReactElement {
         const anneeFormation = localStorage.getItem('annee_formation_groupe') || '2026/2027'
         const periode = localStorage.getItem('periode_application_groupe') || 'Du 01/09/2026 au 30/06/2027'
 
-        setPrintData({
-          type: 'groupe',
-          title: 'EMPLOI DU TEMPS DU GROUPE',
-          subTitle: `ANNEE DE FORMATION : ${anneeFormation}`,
-          codeOrName: g.code_groupe,
-          meta: {
-            'DRGC': 'Direction Régionale Grand Casablanca',
-            'Complexe/EFP': 'CFP IMME / ISTA MY RACHID',
-            'Filière': filiereObj ? `${filiereObj.code_filiere} - ${filiereObj.nom_filiere}` : (g.filiere || 'Filière'),
-            'Groupe': g.code_groupe,
-            'Niveau': anneeLabel,
-            'Période': periode,
-            'Mode de formation': 'FPA / Résidentiel'
-          },
-          grid
-        })
+        const meta = {
+          'DRGC': 'Direction Régionale Grand Casablanca',
+          'Complexe/EFP': 'CFP IMME / ISTA MY RACHID',
+          'Filière': filiereObj ? `${filiereObj.code_filiere} - ${filiereObj.nom_filiere}` : (g.filiere || 'Filière'),
+          'Groupe': g.code_groupe,
+          'Niveau': anneeLabel,
+          'Période': periode,
+          'Mode de formation': 'FPA / Résidentiel'
+        }
 
-        await new Promise(r => setTimeout(r, 100))
-        const base64Data = await generateCurrentPdfBase64()
+        const doc = generateTimetablePdf('groupe', g.code_groupe, meta, grid)
         const folderName = g.code_groupe.trim()
         const fileName = `${folderName}_Emploi_du_Temps.pdf`
 
-        await saveToDesktop(folderName, fileName, base64Data)
-        exportedCount++
+        const res = await savePdfFile(folderName, fileName, doc)
+        if (res && res.success) {
+          exportedCount++
+          if (res.desktopSaved) desktopSavedCount++
+        }
+
+        // Small yield so UI remains silky smooth
+        if (i % 5 === 0) {
+          await new Promise(r => setTimeout(r, 10))
+        }
       }
 
-      toast.success(
-        lang === 'ar'
-          ? `🎉 تم بنجاح تصدير جميع الأفواج (${exportedCount})! تم إنشاء مجلد لكل فوج على سطح المكتب وبداخله ملف الـ PDF الخاص به.`
-          : `🎉 Succès ! ${exportedCount} groupes exportés sur le Bureau dans leurs dossiers respectifs.`
-      )
-    } catch (err) {
-      console.error(err)
-      toast.error(lang === 'ar' ? 'حدث خطأ أثناء التصدير الشامل' : 'Erreur lors de l\'export global')
+      if (desktopSavedCount > 0) {
+        toast.success(
+          lang === 'ar'
+            ? `🎉 تم بنجاح تصدير جميع الأفواج (${exportedCount})! تم إنشاء مجلد لكل فوج على سطح المكتب وبداخله ملف الـ PDF.`
+            : `🎉 Succès ! ${exportedCount} groupes exportés sur le Bureau dans leurs dossiers respectifs.`
+        )
+      } else {
+        toast.success(
+          lang === 'ar'
+            ? `🎉 تم تصدير وتحميل جميع ملفات الـ PDF للأفواج (${exportedCount}) بنجاح!`
+            : `🎉 Succès ! ${exportedCount} plannings PDF exportés avec succès.`
+        )
+      }
+    } catch (err: any) {
+      console.error('exportAllGroupes error:', err)
+      toast.error(lang === 'ar' ? `حدث خطأ: ${err?.message || ''}` : `Erreur: ${err?.message || ''}`)
     } finally {
       setBulkProgress(null)
     }
   }
 
-  // Export ALL Formateurs (Global)
+  // ══════════════════════════════════════════════════════════════════════════
+  // EXPORT ALL FORMATEURS (GLOBAL)
+  // ══════════════════════════════════════════════════════════════════════════
   async function exportAllFormateurs() {
     if (formateurs.length === 0) {
       toast.error(lang === 'ar' ? 'لا يوجد مكونين للتصدير' : 'Aucun formateur à exporter')
@@ -546,6 +763,7 @@ export default function ExportPage(): React.ReactElement {
     try {
       setBulkProgress({ current: 0, total: formateurs.length, label: 'Démarrage de l\'exportation...' })
       let exportedCount = 0
+      let desktopSavedCount = 0
 
       for (let i = 0; i < formateurs.length; i++) {
         const f = formateurs[i]
@@ -554,47 +772,56 @@ export default function ExportPage(): React.ReactElement {
         setBulkProgress({
           current: i + 1,
           total: formateurs.length,
-          label: lang === 'ar' ? `جاري معالجة الأستاذ ${profName} (${i + 1}/${formateurs.length})...` : `Traitement du formateur ${profName} (${i + 1}/${formateurs.length})...`
+          label: lang === 'ar'
+            ? `جاري تصدير الأستاذ ${profName} (${i + 1}/${formateurs.length})...`
+            : `Export du formateur ${profName} (${i + 1}/${formateurs.length})...`
         })
 
         const grid = buildFormateurSchedule(f)
         const anneeFormation = localStorage.getItem('annee_formation_formateur') || '2026/2027'
         const periode = localStorage.getItem('periode_application_formateur') || 'Du 01/09/2026 au 30/06/2027'
 
-        setPrintData({
-          type: 'formateur',
-          title: 'EMPLOI DU TEMPS DU FORMATEUR',
-          subTitle: `ANNEE DE FORMATION : ${anneeFormation}`,
-          codeOrName: profName,
-          meta: {
-            'DRGC': 'Direction Régionale Grand Casablanca',
-            'Complexe/EFP': 'CFP IMME / ISTA MY RACHID',
-            'Formateur': profName,
-            'Matricule': f.matricule || '-',
-            'Spécialité': f.specialite || f.matiere || 'Technique',
-            'Période': periode,
-            'Statut': 'Statutaire'
-          },
-          grid
-        })
+        const meta = {
+          'DRGC': 'Direction Régionale Grand Casablanca',
+          'Complexe/EFP': 'CFP IMME / ISTA MY RACHID',
+          'Formateur': profName,
+          'Matricule': f.matricule || '-',
+          'Spécialité': f.specialite || f.matiere || 'Technique',
+          'Période': periode,
+          'Statut': 'Statutaire'
+        }
 
-        await new Promise(r => setTimeout(r, 100))
-        const base64Data = await generateCurrentPdfBase64()
+        const doc = generateTimetablePdf('formateur', profName, meta, grid)
         const folderName = profName.replace(/[\\/:*?"<>|]/g, '_').trim()
         const fileName = `${folderName}_Emploi_du_Temps.pdf`
 
-        await saveToDesktop(folderName, fileName, base64Data)
-        exportedCount++
+        const res = await savePdfFile(folderName, fileName, doc)
+        if (res && res.success) {
+          exportedCount++
+          if (res.desktopSaved) desktopSavedCount++
+        }
+
+        if (i % 5 === 0) {
+          await new Promise(r => setTimeout(r, 10))
+        }
       }
 
-      toast.success(
-        lang === 'ar'
-          ? `🎉 تم بنجاح تصدير جميع المكونين (${exportedCount}) في مجلداتهم على سطح المكتب!`
-          : `🎉 Succès ! ${exportedCount} formateurs exportés sur le Bureau.`
-      )
-    } catch (err) {
-      console.error(err)
-      toast.error(lang === 'ar' ? 'حدث خطأ أثناء التصدير الشامل' : 'Erreur lors de l\'export global')
+      if (desktopSavedCount > 0) {
+        toast.success(
+          lang === 'ar'
+            ? `🎉 تم بنجاح تصدير جميع المكونين (${exportedCount}) في مجلداتهم الخاصة على سطح المكتب!`
+            : `🎉 Succès ! ${exportedCount} formateurs exportés sur le Bureau.`
+        )
+      } else {
+        toast.success(
+          lang === 'ar'
+            ? `🎉 تم تصدير جميع جداول المكونين (${exportedCount}) بنجاح!`
+            : `🎉 Succès ! ${exportedCount} plannings formateurs exportés avec succès.`
+        )
+      }
+    } catch (err: any) {
+      console.error('exportAllFormateurs error:', err)
+      toast.error(lang === 'ar' ? `حدث خطأ: ${err?.message || ''}` : `Erreur: ${err?.message || ''}`)
     } finally {
       setBulkProgress(null)
     }
@@ -631,7 +858,7 @@ export default function ExportPage(): React.ReactElement {
         {lastExportPath && (
           <button
             className="btn btn-secondary"
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', fontWeight: 600 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', fontWeight: 700 }}
             onClick={() => handleOpenFolder(lastExportPath.targetDir)}
           >
             <FolderOpen size={18} color="#059669" />
@@ -639,6 +866,29 @@ export default function ExportPage(): React.ReactElement {
           </button>
         )}
       </div>
+
+      {/* ── Status Hint if IPC needs restart ── */}
+      {!isIpcAvailable && (
+        <div style={{
+          background: 'rgba(234, 88, 12, 0.08)',
+          border: '1px solid #ea580c',
+          borderRadius: 8,
+          padding: '10px 14px',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontSize: 13,
+          color: '#c2410c'
+        }}>
+          <AlertTriangle size={18} />
+          <span>
+            {lang === 'ar'
+              ? 'تنبيه: لتفعيل الحفظ المباشر في مجلد سطح المكتب تلقائياً، يرجى إعادة تشغيل التطبيق (Restart).'
+              : 'Note : Pour activer la création automatique des dossiers sur le Bureau, veuillez redémarrer l\'application (Restart).'}
+          </span>
+        </div>
+      )}
 
       {/* ── Bulk Progress Banner ── */}
       {bulkProgress && (
@@ -666,7 +916,7 @@ export default function ExportPage(): React.ReactElement {
               width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
               height: '100%',
               background: 'linear-gradient(90deg, #10b981, #059669)',
-              transition: 'width 0.2s ease'
+              transition: 'width 0.15s ease'
             }} />
           </div>
         </div>
@@ -754,8 +1004,7 @@ export default function ExportPage(): React.ReactElement {
                         padding: '12px 16px',
                         background: 'var(--bg-secondary)',
                         borderRadius: 10,
-                        border: '1px solid var(--border)',
-                        transition: 'transform 0.15s ease, border-color 0.15s ease'
+                        border: '1px solid var(--border)'
                       }}
                     >
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -788,7 +1037,7 @@ export default function ExportPage(): React.ReactElement {
             </div>
 
             {/* ══════════════════════════════════════════════════════════
-                CARD 2: PLANNINGS DES GROUPES (Demande de l'utilisateur)
+                CARD 2: PLANNINGS DES GROUPES
             ══════════════════════════════════════════════════════════ */}
             <div className="card" style={{ padding: '24px', border: '1.5px solid rgba(16, 185, 129, 0.4)' }}>
               <div className="card-header" style={{ marginBottom: 16 }}>
@@ -801,7 +1050,7 @@ export default function ExportPage(): React.ReactElement {
                 </span>
               </div>
 
-              {/* Global Button with Emerald Green gradient */}
+              {/* Global Button */}
               <button
                 className="btn btn-primary"
                 style={{
@@ -862,8 +1111,7 @@ export default function ExportPage(): React.ReactElement {
                         padding: '12px 16px',
                         background: 'var(--bg-secondary)',
                         borderRadius: 10,
-                        border: '1px solid var(--border)',
-                        transition: 'transform 0.15s ease, border-color 0.15s ease'
+                        border: '1px solid var(--border)'
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -915,156 +1163,6 @@ export default function ExportPage(): React.ReactElement {
               </div>
             </div>
 
-          </div>
-        )}
-      </div>
-
-      {/* ════════════════════════════════════════════════════════════════════════
-          OFF-SCREEN OFFICIAL OFPPT DOCUMENT TEMPLATE (Captured by html2canvas)
-      ════════════════════════════════════════════════════════════════════════ */}
-      <div
-        style={{
-          position: 'fixed',
-          left: -10000,
-          top: 0,
-          width: 1140,
-          background: '#ffffff',
-          color: '#000000',
-          fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-          zIndex: -999,
-          pointerEvents: 'none'
-        }}
-      >
-        {printData && (
-          <div
-            ref={printSheetRef}
-            style={{
-              padding: 24,
-              background: '#ffffff',
-              border: '2.5px solid #000000',
-              boxSizing: 'border-box',
-              width: 1140
-            }}
-          >
-            {/* Header: Logo + Title */}
-            <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', borderBottom: '2.5px solid #000000', paddingBottom: 8, alignItems: 'center' }}>
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', borderRight: '2px solid #000000', paddingRight: 12 }}>
-                <img src={ofpptLogo} alt="OFPPT Logo" style={{ width: 110, height: 75, objectFit: 'contain' }} />
-              </div>
-              <div style={{ textAlign: 'center', paddingLeft: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: 1.2, color: '#1e293b', marginBottom: 2 }}>
-                  ROYAUME DU MAROC - OFPPT
-                </div>
-                <h1 style={{ fontSize: 22, fontWeight: 900, margin: '2px 0 4px', textTransform: 'uppercase', letterSpacing: 1 }}>
-                  {printData.title} : <span style={{ color: '#0f766e' }}>{printData.codeOrName}</span>
-                </h1>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#334155' }}>
-                  {printData.subTitle}
-                </div>
-              </div>
-            </div>
-
-            {/* Metadata Table */}
-            <div style={{ borderBottom: '2px solid #000000', padding: '10px 14px', fontSize: 13, lineHeight: '22px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.2fr', rowGap: 4, columnGap: 16 }}>
-                {Object.entries(printData.meta).map(([key, val]) => (
-                  <div key={key} style={{ display: 'flex', gap: 6 }}>
-                    <strong style={{ minWidth: 100, color: '#0f172a' }}>{key} :</strong>
-                    <span style={{ color: '#334155', fontWeight: 600 }}>{val}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Weekly Timetable Table */}
-            <div style={{ marginTop: 12 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 12 }}>
-                <thead>
-                  {/* Row 1: Time labels */}
-                  <tr>
-                    <th style={{ width: 100, padding: '8px 4px', border: '1.5px solid #000000', background: '#d1d5db', fontWeight: 900, textAlign: 'center', fontSize: 12 }}>
-                      JOUR / CRÉNEAU
-                    </th>
-                    {TS_LABELS.map((lbl, idx) => (
-                      <th
-                        key={idx}
-                        style={{
-                          padding: '8px 4px',
-                          border: '1.5px solid #000000',
-                          background: '#e5e7eb',
-                          fontWeight: 900,
-                          fontSize: 12,
-                          textAlign: 'center'
-                        }}
-                      >
-                        {lbl}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {JOURS_LIST.map((jour) => (
-                    <tr key={jour} style={{ height: 68 }}>
-                      <td
-                        style={{
-                          padding: '6px 4px',
-                          border: '1.5px solid #000000',
-                          background: '#f3f4f6',
-                          fontWeight: 900,
-                          fontSize: 13,
-                          textAlign: 'center',
-                          letterSpacing: 0.5
-                        }}
-                      >
-                        {jour}
-                      </td>
-
-                      {[0, 1, 2, 3].map((slotIdx) => {
-                        const cell = printData.grid[`${jour}__${slotIdx}`]
-                        return (
-                          <td
-                            key={slotIdx}
-                            style={{
-                              border: '1.5px solid #000000',
-                              padding: 6,
-                              verticalAlign: 'middle',
-                              textAlign: 'center',
-                              background: cell ? '#f0fdf4' : '#ffffff'
-                            }}
-                          >
-                            {cell ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontSize: 12.5, fontWeight: 900, color: '#065f46' }}>
-                                  {cell.module}
-                                </span>
-                                <span style={{ fontSize: 11, fontWeight: 800, color: '#1e293b' }}>
-                                  {printData.type === 'groupe' ? cell.formateur : cell.groupe}
-                                </span>
-                                <span style={{ fontSize: 10.5, fontWeight: 700, color: '#475569', background: '#e2e8f0', padding: '1px 6px', borderRadius: 3 }}>
-                                  {cell.salle}
-                                </span>
-                              </div>
-                            ) : (
-                              <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Footer Signatures */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', marginTop: 22, paddingTop: 10, borderTop: '1.5px solid #000000', fontSize: 13 }}>
-              <div style={{ textAlign: 'center' }}>
-                <strong>Visa du Formateur / Coordinateur</strong>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <strong>Visa du Directeur du Complexe / Chef d'Etablissement</strong>
-              </div>
-            </div>
           </div>
         )}
       </div>
