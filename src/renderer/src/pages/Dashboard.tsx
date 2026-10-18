@@ -125,7 +125,7 @@ export default function Dashboard({ onNavigate }: DashboardProps): React.ReactEl
                 </div>
               </button>
 
-              <button className="recent-item" onClick={() => onNavigate('timetable')} style={{ border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'start' }}>
+              <button className="recent-item" onClick={() => onNavigate('hub')} style={{ border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'start' }}>
                 <div className="recent-item-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-light)' }}>
                   <CalendarDays size={22} />
                 </div>

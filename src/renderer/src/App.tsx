@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import './assets/main.css'
 import Sidebar from './components/Sidebar'
 import HubPage from './pages/HubPage'
-import Dashboard from './pages/Dashboard'
 import FormateursPage from './pages/FormateursPage'
 import StagePage from './pages/StagePage'
 import DnPage from './pages/DnPage'
@@ -11,7 +10,6 @@ import SalleGridPage from './pages/SalleGridPage'
 import SallesPage from './pages/SallesPage'
 import FilieresPage from './pages/FilieresPage'
 import GroupesPage from './pages/GroupesPage'
-import TimetablePage from './pages/TimetablePage'
 import VacancesPage from './pages/VacancesPage'
 import ExportPage from './pages/ExportPage'
 import type { NavPage } from './types'
@@ -62,7 +60,6 @@ function AppContent(): React.ReactElement {
   const renderPage = (): React.ReactElement => {
     switch (currentPage) {
       case 'hub': return <HubPage onNavigate={setCurrentPage} />
-      case 'dashboard': return <Dashboard onNavigate={setCurrentPage} />
       case 'formateurs': return <FormateursPage />
       case 'stage': return <StagePage />
       case 'dn': return <DnPage />
@@ -71,10 +68,9 @@ function AppContent(): React.ReactElement {
       case 'salles': return <SallesPage />
       case 'filieres': return <FilieresPage />
       case 'groupes': return <GroupesPage />
-      case 'timetable': return <TimetablePage />
       case 'vacances': return <VacancesPage />
       case 'export': return <ExportPage />
-      default: return <Dashboard onNavigate={setCurrentPage} />
+      default: return <HubPage onNavigate={setCurrentPage} />
     }
   }
 

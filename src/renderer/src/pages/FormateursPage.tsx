@@ -394,7 +394,29 @@ export default function FormateursPage(): React.ReactElement {
       {/* Page Header */}
       <div className="page-header">
         <div className="page-header-info">
-          <h1>{lang === 'ar' ? 'إدارة المكونين' : 'Gestion des Formateurs'}</h1>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {lang === 'ar' ? 'إدارة المكونين' : 'Gestion des Formateurs'}
+            {!loading && (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 36,
+                height: 36,
+                borderRadius: 99,
+                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 800,
+                padding: '0 10px',
+                boxShadow: '0 4px 12px rgba(99,102,241,0.35)',
+                letterSpacing: 0,
+                lineHeight: 1
+              }}>
+                {formateurs.length}
+              </span>
+            )}
+          </h1>
           <p>{lang === 'ar' ? 'إضافة، تعديل، أو حذف بيانات المكونين (الأساتذة)' : 'Ajouter, modifier ou supprimer les formateurs'}</p>
         </div>
 

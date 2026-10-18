@@ -6,7 +6,6 @@ import {
   DoorOpen,
   BookOpen,
   UsersRound,
-  CalendarDays,
   Search,
   FileDown,
   Wifi,
@@ -31,7 +30,6 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
 
   const navItems = [
     { id: 'hub' as NavPage, label: 'nav.hub', icon: <LayoutDashboard size={22} />, section: 'nav.section.main' },
-    { id: 'dashboard' as NavPage, label: 'nav.dashboard', icon: <Grid3X3 size={22} /> },
     { id: 'formateurs' as NavPage, label: 'nav.formateurs', icon: <Users size={22} />, section: 'nav.section.data' },
     { id: 'stage' as NavPage, label: 'nav.stage', icon: <Briefcase size={22} /> },
     { id: 'dn' as NavPage, label: 'nav.dn', icon: <Database size={22} /> },
@@ -40,7 +38,6 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
     { id: 'salles' as NavPage, label: 'nav.salles', icon: <DoorOpen size={22} /> },
     { id: 'filieres' as NavPage, label: 'nav.filieres', icon: <BookOpen size={22} /> },
     { id: 'groupes' as NavPage, label: 'nav.groupes', icon: <UsersRound size={22} /> },
-    { id: 'timetable' as NavPage, label: 'nav.timetable', icon: <CalendarDays size={22} />, section: 'nav.section.plan' },
     { id: 'export' as NavPage, label: 'nav.export', icon: <FileDown size={22} />, section: 'nav.section.reports' }
   ]
 

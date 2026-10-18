@@ -133,7 +133,29 @@ export default function GroupesPage(): React.ReactElement {
     <div className="fade-in-up">
       <div className="page-header">
         <div className="page-header-info">
-          <h1>{lang === 'ar' ? 'إدارة الأفواج' : 'Gestion des Groupes'}</h1>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {lang === 'ar' ? 'إدارة الأفواج' : 'Gestion des Groupes'}
+            {!loading && (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 36,
+                height: 36,
+                borderRadius: 99,
+                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 800,
+                padding: '0 10px',
+                boxShadow: '0 4px 12px rgba(245,158,11,0.35)',
+                letterSpacing: 0,
+                lineHeight: 1
+              }}>
+                {groupes.length}
+              </span>
+            )}
+          </h1>
           <p>{lang === 'ar' ? 'إدارة المجموعات وحالتهم (في المعهد أو في فترة تدريب ميداني Stage)' : 'Gestion des groupes et statut de stage'}</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>

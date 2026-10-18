@@ -91,7 +91,29 @@ export default function FilieresPage(): React.ReactElement {
     <div className="fade-in-up">
       <div className="page-header">
         <div className="page-header-info">
-          <h1>{lang === 'ar' ? 'إدارة الشعب والتخصصات' : 'Filières et Spécialités'}</h1>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {lang === 'ar' ? 'إدارة الشعب والتخصصات' : 'Filières et Spécialités'}
+            {!loading && (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 36,
+                height: 36,
+                borderRadius: 99,
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 800,
+                padding: '0 10px',
+                boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
+                letterSpacing: 0,
+                lineHeight: 1
+              }}>
+                {filieres.length}
+              </span>
+            )}
+          </h1>
           <p>{lang === 'ar' ? 'إدارة الشعب التدريبية بالمؤسسة (مثال: TEMI, TDI)' : 'Gestion des filières de formation (ex: TEMI, TDI)'}</p>
         </div>
         <button 
