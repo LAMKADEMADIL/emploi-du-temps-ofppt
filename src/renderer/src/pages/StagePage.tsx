@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import toast from 'react-hot-toast'
-import { groupesService, filieresService } from '../services/firebaseService'
+import { groupesService, filieresService, planningSallesService } from '../services/firebaseService'
 import type { Groupe, Filiere } from '../types'
 import { useTranslation } from '../lib/i18n'
 
@@ -88,6 +88,12 @@ export default function StagePage(): React.ReactElement {
         prev.map((g) => (g.id === groupe.id ? { ...g, en_stage: newStatus } : g))
       )
       await groupesService.update(groupe.id, { en_stage: newStatus })
+
+      // إذا أرسلنا المجموعة للتدريب → نمسح خلاياها من Planning Salles تلقائياً
+      if (newStatus === true) {
+        await planningSallesService.deleteCellsByGroupeId(groupe.id)
+      }
+
       toast.success(
         newStatus
           ? (lang === 'ar' ? `تم تحديد ${groupe.code_groupe} في فترة تدريب 💼` : `${groupe.code_groupe} mis en stage 💼`)
@@ -111,6 +117,11 @@ export default function StagePage(): React.ReactElement {
         prev.map((g) => (ids.includes(g.id!) ? { ...g, en_stage: targetStatus } : g))
       )
       await Promise.all(ids.map((id) => groupesService.update(id, { en_stage: targetStatus })))
+
+      // إذا أرسلنا المجموعات للتدريب → نمسح خلاياها من Planning Salles تلقائياً
+      if (targetStatus === true) {
+        await Promise.all(ids.map((id) => planningSallesService.deleteCellsByGroupeId(id)))
+      }
 
       toast.success(
         targetStatus
@@ -147,6 +158,15 @@ export default function StagePage(): React.ReactElement {
       }
 
       await Promise.all(toUpdate.map((g) => groupesService.update(g.id!, { en_stage: isStage })))
+
+      // إذا أرسلنا المجموعات للتدريب → نمسح خلاياها من Planning Salles تلقائياً
+      if (isStage) {
+        await Promise.all(
+          toUpdate
+            .filter((g) => g.id)
+            .map((g) => planningSallesService.deleteCellsByGroupeId(g.id!))
+        )
+      }
 
       toast.success(
         lang === 'ar'

@@ -285,5 +285,12 @@ export const planningSallesService = {
   async deleteAll(): Promise<void> {
     const snap = await getDocs(collection(db, 'planning_salles'))
     await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+  },
+
+  // حذف كل خلايا فوج محدد (عند إرساله للتدريب)
+  async deleteCellsByGroupeId(groupeId: string): Promise<void> {
+    const q = query(collection(db, 'planning_salles'), where('groupeId', '==', groupeId))
+    const snap = await getDocs(q)
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
   }
 }
