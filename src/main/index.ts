@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, nativeImage, ipcMain } from 'electron'
 import { join } from 'path'
+import * as fs from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 function createWindow(): void {
@@ -46,6 +47,60 @@ app.whenReady().then(() => {
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  // IPC Handler: Save PDF to a specific folder on the Desktop
+  ipcMain.handle(
+    'save-pdf-to-desktop',
+    async (_event, payload: { folderName: string; fileName: string; base64Data: string }) => {
+      try {
+        const { folderName, fileName, base64Data } = payload
+        const desktopPath = app.getPath('desktop')
+
+        // Clean folder and file names of forbidden characters (\ / : * ? " < > |)
+        const cleanFolder = (folderName || 'Groupe').replace(/[\\/:*?"<>|]/g, '_').trim()
+        let cleanFile = (fileName || 'Emploi_du_Temps').replace(/[\\/:*?"<>|]/g, '_').trim()
+        if (!cleanFile.toLowerCase().endsWith('.pdf')) {
+          cleanFile += '.pdf'
+        }
+
+        const targetDir = join(desktopPath, cleanFolder)
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true })
+        }
+
+        const filePath = join(targetDir, cleanFile)
+        const buffer = Buffer.from(base64Data, 'base64')
+        fs.writeFileSync(filePath, buffer)
+
+        return {
+          success: true,
+          filePath,
+          targetDir,
+          folderName: cleanFolder,
+          fileName: cleanFile
+        }
+      } catch (err: any) {
+        console.error('save-pdf-to-desktop error:', err)
+        return {
+          success: false,
+          error: err?.message || String(err)
+        }
+      }
+    }
+  )
+
+  // IPC Handler: Open folder or file in system file explorer
+  ipcMain.handle('open-desktop-folder', async (_event, targetPath: string) => {
+    try {
+      if (fs.existsSync(targetPath)) {
+        await shell.openPath(targetPath)
+        return { success: true }
+      }
+      return { success: false, error: 'Path does not exist' }
+    } catch (err: any) {
+      return { success: false, error: err?.message }
+    }
   })
 
   createWindow()
