@@ -2817,60 +2817,6 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           >
             Planning des Salles (Occupation)
           </button>
-
-          {/* Row 8: Action maintenance (Correctly contained inside border) */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, width: '100%', boxSizing: 'border-box' }}>
-            <button
-              className="hub-btn"
-              onClick={() => toast.success('Cellules blanches remplies')}
-              style={{
-                ...hubBtnStyle,
-                color: '#dc2626',
-                fontSize: 10,
-                padding: '6px 2px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
-              }}
-              title="Remplir Cellules En Blanc"
-            >
-              RemplirCellulesBlanc
-            </button>
-            <button
-              className="hub-btn"
-              onClick={() => toast.success('Lignes vides supprimées')}
-              style={{
-                ...hubBtnStyle,
-                color: '#dc2626',
-                fontSize: 10,
-                padding: '6px 2px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
-              }}
-              title="Supprimer Lignes Vides"
-            >
-              SupprimerLignesVides
-            </button>
-          </div>
-
-          {/* Row 9: Vider feuilles */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, width: '100%', boxSizing: 'border-box' }}>
-            <button
-              className="hub-btn"
-              onClick={() => toast('Fonction de vidage', { icon: 'ℹ️' })}
-              style={{ ...hubBtnStyle, color: '#dc2626', fontSize: 11 }}
-            >
-              Vider Samedi
-            </button>
-            <button
-              className="hub-btn"
-              onClick={() => toast('Fonction de vidage FAD', { icon: 'ℹ️' })}
-              style={{ ...hubBtnStyle, color: '#dc2626', fontSize: 11 }}
-            >
-              Vider FAD
-            </button>
-          </div>
         </div>
 
       </div>

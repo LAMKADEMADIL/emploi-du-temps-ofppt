@@ -41,6 +41,9 @@ export default function StagePage(): React.ReactElement {
   const [remplirAction, setRemplirAction] = useState<'stage' | 'presentiel'>('stage')
   const [isApplyingRemplir, setIsApplyingRemplir] = useState(false)
 
+  // Stage toggle confirmation modal
+  const [pendingConfirmGroupe, setPendingConfirmGroupe] = useState<Groupe | null>(null)
+
   // Reset all modal
   const [isResetModalOpen, setIsResetModalOpen] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
@@ -527,7 +530,7 @@ export default function StagePage(): React.ReactElement {
                         return (
                           <td
                             key={colIdx}
-                            onClick={() => toggleGroupeStage(groupe)}
+                            onClick={() => setPendingConfirmGroupe(groupe)}
                             style={{
                               padding: '8px 10px',
                               textAlign: 'center',
@@ -907,6 +910,118 @@ export default function StagePage(): React.ReactElement {
                 {isImporting
                   ? (lang === 'ar' ? 'جاري الاستيراد...' : 'Importation en cours...')
                   : (lang === 'ar' ? 'تأكيد الحفظ' : 'Confirmer')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmation Changement Statut Stage */}
+      {pendingConfirmGroupe && (
+        <div 
+          className="modal-backdrop" 
+          onClick={() => setPendingConfirmGroupe(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 20
+          }}
+        >
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: 16,
+              padding: 24,
+              maxWidth: 440,
+              width: '100%',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+              border: '1px solid #e5e7eb',
+              animation: 'modalSlideUp 0.2s ease-out'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: pendingConfirmGroupe.en_stage ? '#eff6ff' : '#fef3c7',
+                  color: pendingConfirmGroupe.en_stage ? '#2563eb' : '#d97706',
+                  flexShrink: 0
+                }}
+              >
+                {pendingConfirmGroupe.en_stage ? <Building2 size={26} /> : <Briefcase size={26} />}
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#111827' }}>
+                  {pendingConfirmGroupe.en_stage
+                    ? (lang === 'ar' ? 'تأكيد إنهاء فترة التدريب' : 'Confirmer la fin du stage')
+                    : (lang === 'ar' ? 'تأكيد الخروج للتدريب الميداني' : 'Confirmer la mise en stage')}
+                </h3>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#2563eb' }}>
+                  {pendingConfirmGroupe.code_groupe}
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.6, marginBottom: 20 }}>
+              {pendingConfirmGroupe.en_stage
+                ? (lang === 'ar'
+                    ? `هل ترغب حقاً في إنهاء فترة التدريب للمجموعة "${pendingConfirmGroupe.code_groupe}" وإعادتها للحصص الحضورية؟`
+                    : `Voulez-vous confirmer le retour en présentiel pour le groupe "${pendingConfirmGroupe.code_groupe}" ?`)
+                : (lang === 'ar'
+                    ? `هل ترغب في تحديد المجموعة "${pendingConfirmGroupe.code_groupe}" في فترة تدريب ميداني؟ (سيتم تفريغ حصصها من قاعات التدريس تلقائياً).`
+                    : `Voulez-vous envoyer le groupe "${pendingConfirmGroupe.code_groupe}" en stage ? Les salles attribuées seront libérées automatiquement.`)}
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setPendingConfirmGroupe(null)}
+                style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600 }}
+              >
+                {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const target = pendingConfirmGroupe
+                  setPendingConfirmGroupe(null)
+                  if (target) {
+                    await toggleGroupeStage(target)
+                  }
+                }}
+                style={{
+                  padding: '9px 22px',
+                  borderRadius: 10,
+                  fontWeight: 800,
+                  fontSize: 13,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: pendingConfirmGroupe.en_stage
+                    ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
+                    : 'linear-gradient(135deg, #d97706, #b45309)',
+                  color: 'white',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <Check size={16} />
+                {lang === 'ar' ? 'تأكيد' : 'Confirmer'}
               </button>
             </div>
           </div>

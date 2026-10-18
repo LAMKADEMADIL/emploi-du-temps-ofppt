@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import type { NavPage } from '../types'
 import { useTranslation } from '../lib/i18n'
-import ofpptLogo from '../assets/ofppt_logo.jpg'
+import ofpptLogo from '../assets/ofppt_logo_round.png'
 
 interface SidebarProps {
   currentPage: NavPage
@@ -48,11 +48,33 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
       <div className="sidebar-inner">
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <img 
-              src={ofpptLogo} 
-              alt="OFPPT Logo" 
-              style={{ width: 95, height: 95, borderRadius: 12, objectFit: 'contain', background: '#fff', flexShrink: 0, padding: 4 }} 
-            />
+            <div 
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06)',
+                border: '1.5px solid rgba(226, 232, 240, 0.8)',
+                flexShrink: 0,
+                padding: 2,
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+              }}
+            >
+              <img 
+                src={ofpptLogo} 
+                alt="OFPPT Logo" 
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  borderRadius: '50%',
+                  objectFit: 'contain'
+                }} 
+              />
+            </div>
             <div className="sidebar-logo-text">
               <h2>Gestion du Temps</h2>
               <span>OFPPT - ISTA</span>

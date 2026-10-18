@@ -4,7 +4,9 @@ import * as fs from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
 function createWindow(): void {
-  const iconPath = join(__dirname, '../../resources/icons/icon.jpg')
+  const pngIcon = join(__dirname, '../../resources/icons/icon.png')
+  const jpgIcon = join(__dirname, '../../resources/icons/icon.jpg')
+  const iconPath = fs.existsSync(pngIcon) ? pngIcon : jpgIcon
   const appIcon = nativeImage.createFromPath(iconPath)
   
   const mainWindow = new BrowserWindow({
