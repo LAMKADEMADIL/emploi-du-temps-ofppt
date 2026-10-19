@@ -182,7 +182,15 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     groupes: Groupe[]
     schedule: Record<string, { nomFormateur: string; nomSalle: string; module?: string }> // key: `${jour}__${groupeId}__${tsIdx}`
     loading: boolean
+    isCds?: boolean
   } | null>(null)
+
+  // CDS custom hour state (Cours du Soir)
+  const [customCdsHour, setCustomCdsHour] = useState<string>(() => {
+    return localStorage.getItem('custom_cds_hour') || '18H30 à 21H00'
+  })
+  const [isEditingCdsHour, setIsEditingCdsHour] = useState(false)
+  const [tempCdsHour, setTempCdsHour] = useState('')
 
   // Cell edit state
   const [editGroupe, setEditGroupe] = useState('')
@@ -331,6 +339,13 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       .sort((a, b) => a.filiere.localeCompare(b.filiere))
   }, [filieres, formateurs, groupes])
 
+  // Calcul dynamique du nombre de lignes pour afficher TOUS les formateurs affectés sans aucune coupure
+  const maxFilieresProfsRows = useMemo(() => {
+    if (!displayFilieresCols || displayFilieresCols.length === 0) return 7
+    const maxInCols = Math.max(0, ...displayFilieresCols.map(col => col.profs.length))
+    return Math.max(7, maxInCols)
+  }, [displayFilieresCols])
+
   // ── 2. Communication Modules et Formateurs dynamiques ─────────────────────
   const displayCommCols = useMemo(() => {
     return DEFAULT_COMM_COLS.map(col => {
@@ -355,6 +370,12 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       }
     })
   }, [formateurs])
+
+  const maxCommProfsRows = useMemo(() => {
+    if (!displayCommCols || displayCommCols.length === 0) return 6
+    const maxInCols = Math.max(0, ...displayCommCols.map(col => col.profs.length))
+    return Math.max(6, maxInCols)
+  }, [displayCommCols])
 
   // ── Open Section Timetable ──────────────────────────────────────────────────
   async function openSectionTimetable(groupeCodeSample: string, filiereCode: string, anneeLabel: string) {
@@ -403,7 +424,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       anneeLabel,
       groupes: sectionGroupes,
       schedule: {},
-      loading: true
+      loading: true,
+      isCds
     })
 
     try {
@@ -1230,8 +1252,15 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   // VUE 3: EMPLOI DU TEMPS DE LA SECTION
   // ═══════════════════════════════════════════════════════════════════════════
   if (selectedSection) {
+    const isCds = Boolean(
+      selectedSection.isCds ||
+      /CDS/i.test(selectedSection.anneeLabel) ||
+      selectedSection.groupes.some(g => /CDS/i.test(g.code_groupe))
+    )
     const JOURS_LIST = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
-    const TS_LABELS = ['8H30 À 11H00', '11H00 À 13H30', '13H30 À 16H00', '16H00 À 18H30']
+    const TS_LABELS = isCds
+      ? [customCdsHour || '18H30 à 21H00']
+      : ['8H30 À 11H00', '11H00 À 13H30', '13H30 À 16H00', '16H00 À 18H30']
     const anneeFormation = localStorage.getItem('annee_formation_groupe') || '2025-2026'
     const periodeApp = localStorage.getItem('periode_application_groupe') || 'Avril 2026'
 
@@ -1312,7 +1341,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
               <div style={{ textAlign: 'right' }}><strong>Période d'application:</strong> {periodeApp}</div>
               <div><strong>Masse horaire :</strong></div>
               <div></div>
-              <div><strong>Mode de formation :</strong> FPA</div>
+              <div><strong>Mode de formation :</strong> {isCds ? 'CDS' : 'FPA'}</div>
               <div><strong>Parrain:</strong></div>
             </div>
           </div>
@@ -1333,8 +1362,36 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                       HEURE
                     </th>
                     {TS_LABELS.map((lbl, i) => (
-                      <th key={i} style={{ padding: '8px 6px', border: '1.5px solid #000', background: '#d9d9d9', fontWeight: 900, fontSize: 11.5, textAlign: 'center', letterSpacing: 0.2 }}>
-                        {lbl}
+                      <th
+                        key={i}
+                        onClick={() => {
+                          if (isCds) {
+                            setTempCdsHour(customCdsHour)
+                            setIsEditingCdsHour(true)
+                          }
+                        }}
+                        style={{
+                          padding: '8px 6px',
+                          border: '1.5px solid #000',
+                          background: isCds ? '#fef3c7' : '#d9d9d9',
+                          fontWeight: 900,
+                          fontSize: isCds ? 13 : 11.5,
+                          textAlign: 'center',
+                          letterSpacing: 0.2,
+                          cursor: isCds ? 'pointer' : 'default',
+                          color: '#000',
+                          transition: 'background 0.2s'
+                        }}
+                        title={isCds ? (lang === 'ar' ? 'انقر لتعديل التوقيت المسائي (18H30 à 21H00)' : 'Cliquez pour modifier l\'horaire du soir') : undefined}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                          <span>{lbl}</span>
+                          {isCds && (
+                            <span style={{ fontSize: 11, background: '#ca8a04', color: '#fff', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>
+                              ✏️ {lang === 'ar' ? 'تعديل' : 'Modifier'}
+                            </span>
+                          )}
+                        </div>
                       </th>
                     ))}
                   </tr>
@@ -1342,7 +1399,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   <tr>
                     <th style={{ width: 78, padding: '6px 4px', border: '1.5px solid #000', background: '#bdbdbd', fontWeight: 900, fontSize: 12, textAlign: 'center' }}>JOUR</th>
                     <th style={{ width: 82, padding: '6px 4px', border: '1.5px solid #000', background: '#bdbdbd', fontWeight: 900, fontSize: 12, textAlign: 'center' }}>GROUPE</th>
-                    {[0,1,2,3].map(i => <th key={i} style={{ border: '1.5px solid #000', background: '#bdbdbd' }} />)}
+                    {TS_LABELS.map((_, i) => <th key={i} style={{ border: '1.5px solid #000', background: '#bdbdbd' }} />)}
                   </tr>
                 </thead>
                 <tbody>
@@ -1377,12 +1434,29 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                             <td style={{ border: '1.5px solid #000', textAlign: 'center', fontWeight: 700, fontSize: 11, padding: '5px 2px', background: '#f5f7fa', color: '#0a1628', whiteSpace: 'nowrap' }}>
                               {groupe.code_groupe}
                             </td>
-                            {/* 4 time-slot cells */}
-                            {[0, 1, 2, 3].map(tsIdx => {
+                            {/* Time-slot cell(s) */}
+                            {TS_LABELS.map((_, tsIdx) => {
                               const jourUpper = jour.toUpperCase()
-                              const keyWithId = groupe.id ? `${jourUpper}__${groupe.id}__${tsIdx}` : ''
-                              const keyWithCode = `${jourUpper}__${groupe.code_groupe.toUpperCase().replace(/\s+/g, '')}__${tsIdx}`
-                              const cell = (keyWithId && selectedSection.schedule[keyWithId]) || selectedSection.schedule[keyWithCode]
+                              const codeClean = groupe.code_groupe.toUpperCase().replace(/\s+/g, '')
+
+                              // Pour le CDS, on cherche la séance du jour sur n'importe quel créneau horaire
+                              let cell: { nomFormateur: string; nomSalle: string; module?: string } | undefined
+                              if (isCds) {
+                                const possibleKeys = [
+                                  ...[0, 1, 2, 3].map(i => groupe.id ? `${jourUpper}__${groupe.id}__${i}` : ''),
+                                  ...[0, 1, 2, 3].map(i => `${jourUpper}__${codeClean}__${i}`)
+                                ].filter(Boolean)
+                                for (const pk of possibleKeys) {
+                                  if (selectedSection.schedule[pk]) {
+                                    cell = selectedSection.schedule[pk]
+                                    break
+                                  }
+                                }
+                              } else {
+                                const keyWithId = groupe.id ? `${jourUpper}__${groupe.id}__${tsIdx}` : ''
+                                const keyWithCode = `${jourUpper}__${codeClean}__${tsIdx}`
+                                cell = (keyWithId && selectedSection.schedule[keyWithId]) || selectedSection.schedule[keyWithCode]
+                              }
 
                               // 1. If group is in stage, it takes full priority for all slots from 8h30 to 18h30 (Gris clair sobre)
                               if (isEnStage) {
@@ -1406,23 +1480,26 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                 )
                               }
 
-                              // 2. Otherwise if an actual session exists, show it (Nuance de gris officiel)
+                              // 2. Otherwise if an actual session exists, show it (Format Excel: PROF AT SALLE)
                               if (cell && (cell.nomFormateur || cell.nomSalle)) {
+                                const displayText = cell.nomSalle
+                                  ? `${cell.nomFormateur} AT ${cell.nomSalle}`
+                                  : cell.nomFormateur
                                 return (
                                   <td
                                     key={tsIdx}
                                     style={{
                                       border: '1.5px solid #000',
                                       textAlign: 'center',
-                                      fontSize: 11,
-                                      padding: '6px 4px',
+                                      fontSize: 12,
+                                      padding: '8px 6px',
                                       fontWeight: 800,
                                       color: '#0f172a',
-                                      background: '#e2e8f0',
+                                      background: '#f8fafc',
                                       userSelect: 'none'
                                     }}
                                   >
-                                    {cell.nomFormateur} - {cell.nomSalle}
+                                    {displayText}
                                   </td>
                                 )
                               }
@@ -1444,7 +1521,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                       })}
                       {/* Day separator stripe */}
                       <tr>
-                        <td colSpan={6} style={{ height: 9, background: jourIdx % 2 === 0 ? '#dce8f7' : '#eef3fb', borderLeft: '2px solid #000', borderRight: '2px solid #000', borderBottom: '2px solid #000' }} />
+                        <td colSpan={2 + TS_LABELS.length} style={{ height: 9, background: jourIdx % 2 === 0 ? '#dce8f7' : '#eef3fb', borderLeft: '2px solid #000', borderRight: '2px solid #000', borderBottom: '2px solid #000' }} />
                       </tr>
                     </React.Fragment>
                   ))}
@@ -1467,6 +1544,150 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
             <div style={{ fontWeight: 900, fontSize: 13 }}>Directeur du Complexe</div>
           </div>
         </div>
+
+        {/* Modal Modification Horaire CDS */}
+        {isEditingCdsHour && (
+          <div
+            className="modal-overlay"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(3px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1500,
+              padding: 20
+            }}
+            onClick={() => setIsEditingCdsHour(false)}
+          >
+            <div
+              className="modal"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: 440,
+                width: '100%',
+                background: '#ffffff',
+                borderRadius: 14,
+                border: '2px solid #ca8a04',
+                boxShadow: '0 16px 40px rgba(0,0,0,0.2)',
+                padding: 22
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <div style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  background: '#fef3c7',
+                  color: '#b45309',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 22,
+                  flexShrink: 0
+                }}>
+                  ⏰
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#1f2937' }}>
+                    {lang === 'ar' ? 'تعديل توقيت الدروس المسائية (CDS)' : 'Modifier l\'horaire des cours du soir (CDS)'}
+                  </h3>
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>
+                    {lang === 'ar' ? 'حدد التوقيت الذي ترغب في ظهوره في جدول استعمال الزمن' : 'Définissez l\'horaire qui apparaîtra dans l\'emploi du temps'}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6, color: '#374151' }}>
+                  {lang === 'ar' ? 'التوقيت :' : 'Horaire :'}
+                </label>
+                <input
+                  type="text"
+                  value={tempCdsHour}
+                  onChange={(e) => setTempCdsHour(e.target.value)}
+                  placeholder="Ex: 18H30 à 21H00"
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    border: '1.5px solid #d1d5db',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    outline: 'none',
+                    color: '#111827',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Quick choices */}
+              <div style={{ marginBottom: 20 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: 8 }}>
+                  {lang === 'ar' ? 'خيارات سريعة مقترحة :' : 'Suggestions rapides :'}
+                </span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['18H30 à 21H00', '18H00 à 20H30', '19H00 à 21H30', '18H30 - 21H00'].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setTempCdsHour(preset)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: '1px solid #d97706',
+                        background: tempCdsHour === preset ? '#d97706' : '#fffbeb',
+                        color: tempCdsHour === preset ? '#ffffff' : '#b45309',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsEditingCdsHour(false)}
+                  style={{ padding: '8px 16px', fontSize: 13 }}
+                >
+                  {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = tempCdsHour.trim() || '18H30 à 21H00'
+                    setCustomCdsHour(val)
+                    localStorage.setItem('custom_cds_hour', val)
+                    setIsEditingCdsHour(false)
+                    toast.success(lang === 'ar' ? 'تم تحديث التوقيت بنجاح' : 'Horaire mis à jour avec succès')
+                  }}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: 8,
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #d97706, #b45309)',
+                    color: 'white',
+                    boxShadow: '0 2px 8px rgba(217,119,6,0.3)'
+                  }}
+                >
+                  {lang === 'ar' ? 'حفظ التوقيت' : 'Enregistrer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -2370,8 +2591,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                 </tr>
               </thead>
               <tbody>
-                {/* Formateurs rows (max 7 rows) */}
-                {Array.from({ length: 7 }).map((_, rowIdx) => (
+                {/* Formateurs rows (dynamic count to show all assigned professors) */}
+                {Array.from({ length: maxFilieresProfsRows }).map((_, rowIdx) => (
                   <tr key={rowIdx}>
                     {displayFilieresCols.map((col, colIdx) => {
                       const prof = col.profs[rowIdx]
@@ -2626,8 +2847,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                 </tr>
               </thead>
               <tbody>
-                {/* Communication profs rows (max 6 rows) */}
-                {Array.from({ length: 6 }).map((_, rowIdx) => (
+                {/* Communication profs rows (dynamic count to show all assigned professors) */}
+                {Array.from({ length: maxCommProfsRows }).map((_, rowIdx) => (
                   <tr key={rowIdx}>
                     {displayCommCols.map((col, colIdx) => {
                       const prof = col.profs[rowIdx]
