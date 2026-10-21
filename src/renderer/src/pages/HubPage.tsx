@@ -1957,10 +1957,19 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000', fontSize: 13, textAlign: 'center' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '2px solid #000' }}>
-                      <th style={{ width: 110, borderRight: '1.5px solid #000', padding: 8, fontWeight: 900 }}>Jour</th>
-                      <th style={{ width: 90, borderRight: '1.5px solid #000', padding: 8, fontWeight: 900 }}>Heure</th>
+                      <th style={{ width: 110, borderRight: '1.5px solid #000', padding: 8, fontWeight: 900, textAlign: 'center' }}>Jour</th>
+                      <th style={{ width: 90, borderRight: '1.5px solid #000', padding: 8, fontWeight: 900, textAlign: 'center' }}>Heure</th>
                       {activeProfSlots.map((ts, idx) => (
-                        <th key={idx} style={{ borderRight: idx < activeProfSlots.length - 1 ? '1.5px solid #000' : 'none', padding: 8, fontWeight: 900, fontSize: 14 }}>
+                        <th
+                          key={idx}
+                          style={{
+                            borderRight: idx < activeProfSlots.length - 1 ? '1.5px solid #000' : 'none',
+                            padding: 8,
+                            fontWeight: 900,
+                            fontSize: 14,
+                            textAlign: 'center'
+                          }}
+                        >
                           {ts.label}
                         </th>
                       ))}
@@ -2065,7 +2074,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                     padding: '4px',
                                     fontWeight: 700,
                                     color: isSlotGroupInStage ? '#94a3b8' : '#475569',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    textAlign: 'center'
                                   }}
                                 >
                                   {isSlotGroupInStage ? '-' : (slot?.module || '-')}

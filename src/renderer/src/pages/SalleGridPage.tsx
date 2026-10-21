@@ -252,16 +252,10 @@ export default function SalleGridPage(): React.ReactElement {
     return null
   }
 
-  function openCell(jour: string, salle: string, tsIdx: number) {
-    const key = makeKey(jour, salle, tsIdx)
-    const existing = gridData[key]
-    setModalFormateur(existing?.formateurId || '')
-    setModalGroupe(existing?.groupeId || '')
-    setModalModule(existing?.module || '')
-    setModalRemarque(existing?.remarque || '')
-    setSearchF('')
-    setSearchG('')
-    setSelectedCell({ jour, salle, timeslotIdx: tsIdx, key })
+  // ── Note : Modification manuelle désactivée (Ce tableau est en lecture seule, synchronisé depuis le Hub) ──
+  function openCell(_jour: string, _salle: string, _tsIdx: number) {
+    // Mode consultation uniquement : les séances sont gérées depuis le Tableau Central (Hub)
+    return
   }
 
   async function saveCell() {
@@ -414,10 +408,12 @@ export default function SalleGridPage(): React.ReactElement {
               </h1>
               <p style={{ fontSize: 13.5, color: '#4b5563', margin: '3px 0 0 0' }}>
                 {activeView === 'occupation'
-                  ? 'Cliquez sur une cellule pour assigner un formateur, groupe et module'
+                  ? (lang === 'ar'
+                      ? 'عرض استغلال القاعات (جدول متزامن تلقائياً من المركز الرئيسي)'
+                      : 'Consultation de l\'occupation des salles (Synchronisé automatiquement depuis le Hub)')
                   : activeView === 'salles_vides'
-                  ? 'Tableau hebdomadaire récapitulatif des salles et ateliers non occupés'
-                  : 'Disponibilité des groupes par filière (Noir = Libre / Rouge = En cours)'}
+                  ? (lang === 'ar' ? 'جدول أسبوعي للقاعات والورشات الشاغرة' : 'Tableau hebdomadaire récapitulatif des salles et ateliers non occupés')
+                  : (lang === 'ar' ? 'توفر المجموعات حسب الشعبة (أسود = شاغر / أحمر = في حصة)' : 'Disponibilité des groupes par filière (Noir = Libre / Rouge = En cours)')}
               </p>
             </div>
           </div>
@@ -688,7 +684,7 @@ export default function SalleGridPage(): React.ReactElement {
                               return (
                                 <td
                                   key={tsIdx}
-                                  onClick={() => openCell(jour, salle, tsIdx)}
+                                  /* Note : Le clic pour éditer a été désactivé ici car ce tableau est rempli et synchronisé automatiquement depuis le Hub */
                                   title={[conflict.hasConflict ? `⚠️ ${conflict.message}` : '', tooltipTitle].filter(Boolean).join(' | ') || undefined}
                                   style={{
                                     border: conflict.hasConflict ? '2px solid #b91c1c' : '1px solid #94a3b8',
@@ -696,15 +692,12 @@ export default function SalleGridPage(): React.ReactElement {
                                     padding: 0,
                                     minWidth: 150,
                                     height: 38,
-                                    cursor: 'pointer',
-                                    transition: 'filter 0.15s',
+                                    cursor: 'default',
                                     background: cellBg,
                                     textAlign: 'center',
                                     verticalAlign: 'middle',
                                     boxShadow: conflict.hasConflict ? 'inset 0 0 0 2px #fecaca' : 'none'
                                   }}
-                                  onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.88)' }}
-                                  onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
                                 >
                                   {label && (
                                     <span style={{
@@ -752,7 +745,7 @@ export default function SalleGridPage(): React.ReactElement {
         </div>
       </div>
 
-      {/* ── Selection Modal ─────────────────────────────────────────────────── */}
+      {/* ── Selection Modal : Désactivée car le tableau est en mode consultation (rempli depuis le Hub) ── */}
       {selectedCell && (
         <div
           className="modal-overlay"
