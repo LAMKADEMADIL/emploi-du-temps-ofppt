@@ -37,6 +37,7 @@ import ofpptLogo from '../assets/ofppt_logo.jpg'
 interface FallbackFiliereInfo {
   filiere: string
   profs: string[]
+  cdsProfs?: string[]
   annee1: string
   annee2: string
   anneeExtra?: string
@@ -149,6 +150,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   // Selection - Formateur
   const [selectedProfName, setSelectedProfName] = useState<string | null>(null)
   const [selectedProfFiliere, setSelectedProfFiliere] = useState<string>('TFM')
+  const [selectedProfIsCds, setSelectedProfIsCds] = useState<boolean>(false)
   const [profSchedule, setProfSchedule] = useState<ScheduleMap>({})
   const [statut, setStatut] = useState<'statutaire' | 'cooperant' | 'vacataire' | 'contrat'>('statutaire')
   const [activeCellKey, setActiveCellKey] = useState<string | null>(null)
@@ -276,26 +278,48 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
         })
         const fGroupeCodes = new Set(fGroupes.map(g => g.code_groupe.toUpperCase().replace(/\s+/g, '')))
 
-        // Find formateurs assigned to groups of this filière from real DB
-        const assignedProfs: string[] = []
+        const dayGroups = fGroupes.filter(g => !isCds(g.code_groupe))
+        const cdsGroups = fGroupes.filter(g => isCds(g.code_groupe))
+        const dayGroupeCodes = new Set(dayGroups.map(g => g.code_groupe.toUpperCase().replace(/\s+/g, '')))
+        const cdsGroupeCodes = new Set(cdsGroups.map(g => g.code_groupe.toUpperCase().replace(/\s+/g, '')))
+
+        // Find formateurs assigned to DAY groups
+        const assignedDayProfs: string[] = []
+        // Find formateurs assigned to CDS groups
+        const assignedCdsProfs: string[] = []
 
         if (formateurs && formateurs.length > 0) {
           formateurs.forEach(formateur => {
-            const hasMatch = formateur.groupes_assignes?.some(gCode => {
+            const name = (formateur.nom || formateur.nom_prenom || '').toUpperCase()
+            if (!name) return
+
+            // Check day groups
+            const hasDayMatch = formateur.groupes_assignes?.some(gCode => {
               const clean = gCode.toUpperCase().replace(/\s+/g, '')
-              return fGroupeCodes.has(clean) || clean.startsWith(filiereCode)
+              if (isCds(clean)) return false
+              return dayGroupeCodes.has(clean) || (clean.startsWith(filiereCode) && !isCds(clean))
             })
-            if (hasMatch) {
-              const name = (formateur.nom || formateur.nom_prenom || '').toUpperCase()
-              if (name && !assignedProfs.includes(name)) {
-                assignedProfs.push(name)
-              }
+            if (hasDayMatch && !assignedDayProfs.includes(name)) {
+              assignedDayProfs.push(name)
+            }
+
+            // Check CDS groups from assignments and scheduled sessions
+            const hasCdsMatch = formateur.groupes_assignes?.some(gCode => {
+              const clean = gCode.toUpperCase().replace(/\s+/g, '')
+              if (!isCds(clean)) return false
+              return cdsGroupeCodes.has(clean) || (clean.startsWith(filiereCode) && isCds(clean))
+            })
+            const hasPlanningCdsMatch = Object.entries(planningSallesMap).some(([pk, pCell]) => {
+              if (!pCell || !isSameFormateur(pCell.formateurId, name)) return false
+              const pGrp = String(pCell.groupeId || '').toUpperCase().replace(/\s+/g, '')
+              return isCds(pGrp) && (cdsGroupeCodes.has(pGrp) || pGrp.startsWith(filiereCode))
+            })
+            if ((hasCdsMatch || hasPlanningCdsMatch) && !assignedCdsProfs.includes(name)) {
+              assignedCdsProfs.push(name)
             }
           })
         }
 
-        const dayGroups = fGroupes.filter(g => !isCds(g.code_groupe))
-        const cdsGroups = fGroupes.filter(g => isCds(g.code_groupe))
         const fallback = DEFAULT_FALLBACK_COLS.find(df => df.filiere.toUpperCase() === filiereCode)
 
         // Determine 1ère année and 2ème année codes from database (day groups)
@@ -312,7 +336,8 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
 
         return {
           filiere: f.code_filiere,
-          profs: assignedProfs,
+          profs: assignedDayProfs,
+          cdsProfs: assignedCdsProfs,
           annee1,
           annee2,
           anneeExtra: cdsList[0] || '',
@@ -330,20 +355,40 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           ? Array.from(new Set(dbCds.map(g => g.code_groupe.replace(/\s+/g, '').toUpperCase())))
           : (col.cdsList || (col.anneeExtra ? [col.anneeExtra] : []))
 
+        const fallbackCdsProfs: string[] = []
+        if (formateurs && formateurs.length > 0) {
+          formateurs.forEach(f => {
+            const name = (f.nom || f.nom_prenom || '').toUpperCase()
+            if (!name) return
+            const hasCds = f.groupes_assignes?.some(g => isCds(g) && g.toUpperCase().startsWith(filCode))
+            if (hasCds && !fallbackCdsProfs.includes(name)) {
+              fallbackCdsProfs.push(name)
+            }
+          })
+        }
+
         return {
           ...col,
           cdsList,
-          profs: formateurs && formateurs.length > 0 ? col.profs : []
+          profs: formateurs && formateurs.length > 0 ? col.profs : [],
+          cdsProfs: fallbackCdsProfs
         }
       })
       .sort((a, b) => a.filiere.localeCompare(b.filiere))
-  }, [filieres, formateurs, groupes])
+  }, [filieres, formateurs, groupes, planningSallesMap])
 
   // Calcul dynamique du nombre de lignes pour afficher TOUS les formateurs affectés sans aucune coupure
   const maxFilieresProfsRows = useMemo(() => {
     if (!displayFilieresCols || displayFilieresCols.length === 0) return 7
     const maxInCols = Math.max(0, ...displayFilieresCols.map(col => col.profs.length))
     return Math.max(7, maxInCols)
+  }, [displayFilieresCols])
+
+  // Calcul dynamique du nombre de lignes pour les formateurs du soir (CDS)
+  const maxCdsProfsRows = useMemo(() => {
+    if (!displayFilieresCols || displayFilieresCols.length === 0) return 1
+    const maxInCols = Math.max(0, ...displayFilieresCols.map(col => (col.cdsProfs || []).length))
+    return Math.max(1, maxInCols)
   }, [displayFilieresCols])
 
   // ── 2. Communication Modules et Formateurs dynamiques ─────────────────────
@@ -446,7 +491,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           const jourUpper = parts[0].toUpperCase()
           const salleFromKey = parts[1].toUpperCase()
           const tsIdx = parseInt(parts[2], 10)
-          if (isNaN(tsIdx) || tsIdx < 0 || tsIdx > 3) continue
+          if (isNaN(tsIdx) || tsIdx < 0 || tsIdx > 4) continue
 
           // Find target group in this section
           const targetGroup = sectionGroupes.find(g => 
@@ -486,7 +531,10 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           )
           if (!targetGroup) continue
 
-          const tsIdx = ['08:30', '11:00', '13:30', '16:00'].indexOf(seance.heure_debut)
+          let tsIdx = ['08:30', '11:00', '13:30', '16:00'].indexOf(seance.heure_debut)
+          if (tsIdx === -1 && (seance.heure_debut === '18:30' || seance.heure_debut === '18h30' || /18/i.test(seance.heure_debut))) {
+            tsIdx = 4
+          }
           if (tsIdx === -1) continue
 
           const formateur = formateurs.find(f => 
@@ -668,9 +716,10 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
   }, [])
 
   // Load schedule for a formateur DIRECTLY from database (planning_salles in Firebase)
-  async function openFormateurSchedule(profName: string, filiereCode: string) {
+  async function openFormateurSchedule(profName: string, filiereCode: string, isCds = false) {
     setSelectedProfName(profName)
     setSelectedProfFiliere(filiereCode)
+    setSelectedProfIsCds(isCds)
 
     let planningMap: Record<string, any> = planningSallesMap
     try {
@@ -719,7 +768,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       const [day, slotIdxStr] = key.split('_')
       const slotIdx = parseInt(slotIdxStr, 10)
       const dayUpper = day.toUpperCase()
-      const timeLabel = TIMESLOTS[slotIdx] ? TIMESLOTS[slotIdx].label : ''
+      const timeLabel = TIMESLOTS[slotIdx] ? TIMESLOTS[slotIdx].label : (customCdsHour || '18H30 à 21H00')
 
       // 1. Vérifier conflit de salle
       if (slot.salle && slot.salle.trim()) {
@@ -1164,7 +1213,12 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     setShowDateModal(false)
   }
 
-  const totalSeancesCount = Object.keys(profSchedule).length
+  const currentViewSlots = Object.entries(profSchedule).filter(([k, s]) => {
+    if (!s || (!s.groupe && !s.salle && !s.module)) return false
+    const isSlotCds = k.endsWith('_4')
+    return selectedProfIsCds ? isSlotCds : !isSlotCds
+  })
+  const totalSeancesCount = currentViewSlots.length
   const masseHoraireCalculated = totalSeancesCount * 2.5
 
   // ── Compute exact groups taught by the active formateur from Database ─────────
@@ -1238,12 +1292,26 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
       result = filiereGroups.length > 0 ? filiereGroups.sort((a, b) => a.localeCompare(b)) : groupes.map(g => g.code_groupe).slice(0, 12)
     }
 
+    // Filter according to Day vs CDS mode
+    if (selectedProfIsCds) {
+      const cdsOnly = result.filter(code => /CDS/i.test(code))
+      if (cdsOnly.length > 0) {
+        result = cdsOnly
+      } else {
+        const allCds = groupes.filter(g => /CDS/i.test(g.code_groupe)).map(g => g.code_groupe)
+        if (allCds.length > 0) result = allCds
+      }
+    } else {
+      const dayOnly = result.filter(code => !/CDS/i.test(code))
+      if (dayOnly.length > 0) result = dayOnly
+    }
+
     // ── Exclure les groupes en stage (les groupes en stage sont hors établissement)
     const inStageCodes = new Set(
       groupes.filter(g => g.en_stage).map(g => g.code_groupe.toUpperCase().trim())
     )
     return result.filter(code => !inStageCodes.has(code.toUpperCase().trim()))
-  }, [selectedProfName, selectedProfFiliere, formateurs, groupes, profSchedule])
+  }, [selectedProfName, selectedProfFiliere, formateurs, groupes, profSchedule, selectedProfIsCds])
 
   // ═══════════════════════════════════════════════════════════════════════════
   // VUE 2: EMPLOI DU TEMPS DU FORMATEUR (FACE A FACE)
@@ -1439,12 +1507,12 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                               const jourUpper = jour.toUpperCase()
                               const codeClean = groupe.code_groupe.toUpperCase().replace(/\s+/g, '')
 
-                              // Pour le CDS, on cherche la séance du jour sur n'importe quel créneau horaire
+                              // Pour le CDS, on cherche la séance du jour sur le créneau du soir (4) en priorité
                               let cell: { nomFormateur: string; nomSalle: string; module?: string } | undefined
                               if (isCds) {
                                 const possibleKeys = [
-                                  ...[0, 1, 2, 3].map(i => groupe.id ? `${jourUpper}__${groupe.id}__${i}` : ''),
-                                  ...[0, 1, 2, 3].map(i => `${jourUpper}__${codeClean}__${i}`)
+                                  ...[4, 0, 1, 2, 3].map(i => groupe.id ? `${jourUpper}__${groupe.id}__${i}` : ''),
+                                  ...[4, 0, 1, 2, 3].map(i => `${jourUpper}__${codeClean}__${i}`)
                                 ].filter(Boolean)
                                 for (const pk of possibleKeys) {
                                   if (selectedSection.schedule[pk]) {
@@ -1760,11 +1828,16 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
 
             <div style={{ textAlign: 'center' }}>
               <h1 style={{ fontSize: 21, fontWeight: 900, margin: '0 0 6px 0', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                EMPLOI DU TEMPS DU FORMATEUR FACE A FACE : Stagiaires
+                {selectedProfIsCds
+                  ? (lang === 'ar' ? 'استعمال الزمن للأستاذ (دروس مسائية - CDS)' : 'EMPLOI DU TEMPS DU FORMATEUR (COURS DU SOIR - CDS)')
+                  : (lang === 'ar' ? 'استعمال الزمن للأستاذ حضورياً : المتدربون' : 'EMPLOI DU TEMPS DU FORMATEUR FACE A FACE : Stagiaires')}
               </h1>
               <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>
                 ANNEE DE FORMATION : {anneeFormateur}
               </div>
+
+              {/* Note : Le sélecteur manuel Jour / CDS a été retiré.
+                  Le mode (Jour ou Cours du Soir CDS) s'applique automatiquement selon la ligne sélectionnée dans le tableau principal (Hub). */}
             </div>
 
             {/* Sync Control Buttons Box */}
@@ -1874,179 +1947,190 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
           </div>
 
           {/* Weekly Timetable Grid Table */}
-          <div style={{ marginTop: 14, overflowX: 'auto', overflowY: 'visible' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000', fontSize: 13, textAlign: 'center' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #000' }}>
-                  <th style={{ width: 110, borderRight: '1.5px solid #000', padding: 8, fontWeight: 900 }}>Jour</th>
-                  <th style={{ width: 90, borderRight: '1.5px solid #000', padding: 8, fontWeight: 900 }}>Heure</th>
-                  {TIMESLOTS.map((ts, idx) => (
-                    <th key={idx} style={{ borderRight: idx < 3 ? '1.5px solid #000' : 'none', padding: 8, fontWeight: 900, fontSize: 14 }}>
-                      {ts.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {DAYS.map((day) => {
-                  return (
-                    <React.Fragment key={day}>
-                      {/* Row 1: Groupe */}
-                      <tr style={{ borderTop: '2px solid #000' }}>
-                        <td
-                          rowSpan={3}
-                          style={{
-                            borderRight: '1.5px solid #000',
-                            borderBottom: '2px solid #000',
-                            fontWeight: 900,
-                            fontSize: 15,
-                            background: '#f8fafc',
-                            verticalAlign: 'middle',
-                            textTransform: 'uppercase'
-                          }}
-                        >
-                          {day}
-                        </td>
-                        <td style={{ borderRight: '1.5px solid #000', borderBottom: '1px solid #cbd5e1', fontWeight: 800, padding: '4px', background: '#f1f5f9' }}>
-                          Groupe
-                        </td>
-                        {TIMESLOTS.map((_, slotIdx) => {
-                          const slot = profSchedule[`${day}_${slotIdx}`]
-                          const cleanGrp = (slot?.groupe || '').toUpperCase().trim()
-                          const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
-                            ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
-                            : false
-                          const hasGroupeConflict = !isSlotGroupInStage && !!slot?.conflitGroupe
+          {(() => {
+            const activeProfSlots = selectedProfIsCds
+              ? [{ label: customCdsHour || '18H30 à 21H00', slotIdx: 4 }]
+              : TIMESLOTS.map((ts, idx) => ({ label: ts.label, slotIdx: idx }))
 
-                          return (
+            return (
+              <div style={{ marginTop: 14, overflowX: 'auto', overflowY: 'visible' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000', fontSize: 13, textAlign: 'center' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #000' }}>
+                      <th style={{ width: 110, borderRight: '1.5px solid #000', padding: 8, fontWeight: 900 }}>Jour</th>
+                      <th style={{ width: 90, borderRight: '1.5px solid #000', padding: 8, fontWeight: 900 }}>Heure</th>
+                      {activeProfSlots.map((ts, idx) => (
+                        <th key={idx} style={{ borderRight: idx < activeProfSlots.length - 1 ? '1.5px solid #000' : 'none', padding: 8, fontWeight: 900, fontSize: 14 }}>
+                          {ts.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {DAYS.map((day) => {
+                      return (
+                        <React.Fragment key={day}>
+                          {/* Row 1: Groupe */}
+                          <tr style={{ borderTop: '2px solid #000' }}>
                             <td
-                              key={slotIdx}
-                              onClick={() => handleCellClick(day, slotIdx)}
+                              rowSpan={3}
                               style={{
-                                borderRight: slotIdx < 3 ? '1.5px solid #000' : 'none',
-                                borderBottom: '1px solid #cbd5e1',
-                                padding: '6px 4px',
-                                fontWeight: hasGroupeConflict ? 900 : 800,
-                                fontSize: isSlotGroupInStage ? 12 : 14,
-                                fontStyle: isSlotGroupInStage ? 'italic' : 'normal',
-                                color: isSlotGroupInStage ? '#64748b' : (hasGroupeConflict ? '#ffffff' : (slot?.groupe ? '#0f172a' : '#94a3b8')),
-                                cursor: 'pointer',
-                                background: isSlotGroupInStage ? '#f1f5f9' : (hasGroupeConflict ? '#dc2626' : (slot?.groupe ? '#f8fafc' : '#ffffff')),
-                                transition: 'background 0.15s',
-                                textAlign: 'center'
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!hasGroupeConflict) e.currentTarget.style.background = '#e2e8f0'
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!hasGroupeConflict) e.currentTarget.style.background = isSlotGroupInStage ? '#f1f5f9' : (slot?.groupe ? '#f8fafc' : '#ffffff')
-                              }}
-                              title={
-                                isSlotGroupInStage
-                                  ? `Le groupe ${slot?.groupe} est en stage en entreprise (hors établissement)`
-                                  : (hasGroupeConflict ? slot?.conflitGroupe?.message : "Cliquer pour modifier cette séance")
-                              }
-                            >
-                              {isSlotGroupInStage ? (
-                                'Stage'
-                              ) : hasGroupeConflict ? (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                                  <span>⚠️</span>
-                                  <span>{slot?.groupe}</span>
-                                </span>
-                              ) : (
-                                slot?.groupe || '-'
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-
-                      {/* Row 2: Module */}
-                      <tr>
-                        <td style={{ borderRight: '1.5px solid #000', borderBottom: '1px solid #cbd5e1', fontWeight: 800, padding: '4px', background: '#f1f5f9' }}>
-                          Module
-                        </td>
-                        {TIMESLOTS.map((_, slotIdx) => {
-                          const slot = profSchedule[`${day}_${slotIdx}`]
-                          const cleanGrp = (slot?.groupe || '').toUpperCase().trim()
-                          const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
-                            ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
-                            : false
-
-                          return (
-                            <td
-                              key={slotIdx}
-                              onClick={() => handleCellClick(day, slotIdx)}
-                              style={{
-                                borderRight: slotIdx < 3 ? '1.5px solid #000' : 'none',
-                                borderBottom: '1px solid #cbd5e1',
-                                padding: '4px',
-                                fontWeight: 700,
-                                color: isSlotGroupInStage ? '#94a3b8' : '#475569',
-                                cursor: 'pointer'
+                                borderRight: '1.5px solid #000',
+                                borderBottom: '2px solid #000',
+                                fontWeight: 900,
+                                fontSize: 15,
+                                background: '#f8fafc',
+                                verticalAlign: 'middle',
+                                textTransform: 'uppercase'
                               }}
                             >
-                              {isSlotGroupInStage ? '-' : (slot?.module || '-')}
+                              {day}
                             </td>
-                          )
-                        })}
-                      </tr>
-
-                      {/* Row 3: Salle */}
-                      <tr style={{ borderBottom: '2px solid #000' }}>
-                        <td style={{ borderRight: '1.5px solid #000', fontWeight: 800, padding: '4px', background: '#f1f5f9' }}>
-                          salle
-                        </td>
-                        {TIMESLOTS.map((_, slotIdx) => {
-                          const slot = profSchedule[`${day}_${slotIdx}`]
-                          const cleanGrp = (slot?.groupe || '').toUpperCase().trim()
-                          const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
-                            ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
-                            : false
-                          const hasConflict = !isSlotGroupInStage && !!slot?.conflit
-
-                          return (
-                            <td
-                              key={slotIdx}
-                              onClick={() => handleCellClick(day, slotIdx)}
-                              style={{
-                                borderRight: slotIdx < 3 ? '1.5px solid #000' : 'none',
-                                padding: '4px',
-                                fontWeight: hasConflict ? 900 : 800,
-                                color: isSlotGroupInStage ? '#94a3b8' : (hasConflict ? '#ffffff' : (slot?.salle ? '#1d4ed8' : '#94a3b8')),
-                                cursor: 'pointer',
-                                background: isSlotGroupInStage ? '#f8fafc' : (hasConflict ? '#dc2626' : (slot?.salle ? '#eff6ff' : 'transparent')),
-                                textAlign: 'center',
-                                transition: 'all 0.15s ease',
-                                position: 'relative'
-                              }}
-                              title={
-                                isSlotGroupInStage
-                                  ? 'Groupe en stage en entreprise (aucune salle occupée)'
-                                  : (hasConflict ? slot?.conflit?.message : (slot?.salle ? `Salle: ${slot.salle} (Cliquer pour modifier)` : 'Cliquer pour assigner une salle'))
-                              }
-                            >
-                              {isSlotGroupInStage ? (
-                                '-'
-                              ) : hasConflict ? (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                                  <span>⚠️</span>
-                                  <span>{slot?.salle}</span>
-                                </span>
-                              ) : (
-                                slot?.salle || '-'
-                              )}
+                            <td style={{ borderRight: '1.5px solid #000', borderBottom: '1px solid #cbd5e1', fontWeight: 800, padding: '4px', background: '#f1f5f9' }}>
+                              Groupe
                             </td>
-                          )
-                        })}
-                      </tr>
-                    </React.Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                            {activeProfSlots.map((tsItem, colIndex) => {
+                              const slotIdx = tsItem.slotIdx
+                              const slot = profSchedule[`${day}_${slotIdx}`]
+                              const cleanGrp = (slot?.groupe || '').toUpperCase().trim()
+                              const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
+                                ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
+                                : false
+                              const hasGroupeConflict = !isSlotGroupInStage && !!slot?.conflitGroupe
+
+                              return (
+                                <td
+                                  key={slotIdx}
+                                  onClick={() => handleCellClick(day, slotIdx)}
+                                  style={{
+                                    borderRight: colIndex < activeProfSlots.length - 1 ? '1.5px solid #000' : 'none',
+                                    borderBottom: '1px solid #cbd5e1',
+                                    padding: '6px 4px',
+                                    fontWeight: hasGroupeConflict ? 900 : 800,
+                                    fontSize: isSlotGroupInStage ? 12 : 14,
+                                    fontStyle: isSlotGroupInStage ? 'italic' : 'normal',
+                                    color: isSlotGroupInStage ? '#64748b' : (hasGroupeConflict ? '#ffffff' : (slot?.groupe ? '#0f172a' : '#94a3b8')),
+                                    cursor: 'pointer',
+                                    background: isSlotGroupInStage ? '#f1f5f9' : (hasGroupeConflict ? '#dc2626' : (slot?.groupe ? '#f8fafc' : '#ffffff')),
+                                    transition: 'background 0.15s',
+                                    textAlign: 'center'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!hasGroupeConflict) e.currentTarget.style.background = '#e2e8f0'
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!hasGroupeConflict) e.currentTarget.style.background = isSlotGroupInStage ? '#f1f5f9' : (slot?.groupe ? '#f8fafc' : '#ffffff')
+                                  }}
+                                  title={
+                                    isSlotGroupInStage
+                                      ? `Le groupe ${slot?.groupe} est en stage en entreprise (hors établissement)`
+                                      : (hasGroupeConflict ? slot?.conflitGroupe?.message : "Cliquer pour modifier cette séance")
+                                  }
+                                >
+                                  {isSlotGroupInStage ? (
+                                    'Stage'
+                                  ) : hasGroupeConflict ? (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                      <span>⚠️</span>
+                                      <span>{slot?.groupe}</span>
+                                    </span>
+                                  ) : (
+                                    slot?.groupe || '-'
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+
+                          {/* Row 2: Module */}
+                          <tr>
+                            <td style={{ borderRight: '1.5px solid #000', borderBottom: '1px solid #cbd5e1', fontWeight: 800, padding: '4px', background: '#f1f5f9' }}>
+                              Module
+                            </td>
+                            {activeProfSlots.map((tsItem, colIndex) => {
+                              const slotIdx = tsItem.slotIdx
+                              const slot = profSchedule[`${day}_${slotIdx}`]
+                              const cleanGrp = (slot?.groupe || '').toUpperCase().trim()
+                              const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
+                                ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
+                                : false
+
+                              return (
+                                <td
+                                  key={slotIdx}
+                                  onClick={() => handleCellClick(day, slotIdx)}
+                                  style={{
+                                    borderRight: colIndex < activeProfSlots.length - 1 ? '1.5px solid #000' : 'none',
+                                    borderBottom: '1px solid #cbd5e1',
+                                    padding: '4px',
+                                    fontWeight: 700,
+                                    color: isSlotGroupInStage ? '#94a3b8' : '#475569',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {isSlotGroupInStage ? '-' : (slot?.module || '-')}
+                                </td>
+                              )
+                            })}
+                          </tr>
+
+                          {/* Row 3: Salle */}
+                          <tr style={{ borderBottom: '2px solid #000' }}>
+                            <td style={{ borderRight: '1.5px solid #000', fontWeight: 800, padding: '4px', background: '#f1f5f9' }}>
+                              salle
+                            </td>
+                            {activeProfSlots.map((tsItem, colIndex) => {
+                              const slotIdx = tsItem.slotIdx
+                              const slot = profSchedule[`${day}_${slotIdx}`]
+                              const cleanGrp = (slot?.groupe || '').toUpperCase().trim()
+                              const isSlotGroupInStage = cleanGrp && cleanGrp !== '-'
+                                ? groupes.some(g => g.code_groupe.toUpperCase().trim() === cleanGrp && g.en_stage)
+                                : false
+                              const hasConflict = !isSlotGroupInStage && !!slot?.conflit
+
+                              return (
+                                <td
+                                  key={slotIdx}
+                                  onClick={() => handleCellClick(day, slotIdx)}
+                                  style={{
+                                    borderRight: colIndex < activeProfSlots.length - 1 ? '1.5px solid #000' : 'none',
+                                    padding: '4px',
+                                    fontWeight: hasConflict ? 900 : 800,
+                                    color: isSlotGroupInStage ? '#94a3b8' : (hasConflict ? '#ffffff' : (slot?.salle ? '#1d4ed8' : '#94a3b8')),
+                                    cursor: 'pointer',
+                                    background: isSlotGroupInStage ? '#f8fafc' : (hasConflict ? '#dc2626' : (slot?.salle ? '#eff6ff' : 'transparent')),
+                                    textAlign: 'center',
+                                    transition: 'all 0.15s ease',
+                                    position: 'relative'
+                                  }}
+                                  title={
+                                    isSlotGroupInStage
+                                      ? 'Groupe en stage en entreprise (aucune salle occupée)'
+                                      : (hasConflict ? slot?.conflit?.message : (slot?.salle ? `Salle: ${slot.salle} (Cliquer pour modifier)` : 'Cliquer pour assigner une salle'))
+                                  }
+                                >
+                                  {isSlotGroupInStage ? (
+                                    '-'
+                                  ) : hasConflict ? (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                      <span>⚠️</span>
+                                      <span>{slot?.salle}</span>
+                                    </span>
+                                  ) : (
+                                    slot?.salle || '-'
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        </React.Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
 
           {/* Signatures Footer */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', border: '2px solid #000', borderTop: 'none', textAlign: 'center', marginTop: -2, padding: '16px 0 50px' }}>
@@ -2068,7 +2152,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
             <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, padding: '24px 28px' }}>
               <div className="modal-header" style={{ marginBottom: 16 }}>
                 <h3 className="modal-title" style={{ fontSize: 18, fontWeight: 800 }}>
-                  Modifier la séance ({cellEditModal.day} - {TIMESLOTS[cellEditModal.slotIdx].label})
+                  Modifier la séance ({cellEditModal.day} - {TIMESLOTS[cellEditModal.slotIdx]?.label || customCdsHour || '18H30 à 21H00'})
                 </h3>
                 <button className="modal-close" onClick={() => setCellEditModal(null)}>×</button>
               </div>
@@ -2720,7 +2804,30 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   ))}
                 </tr>
 
-                {/* Annee Extra Row (e.g. CDS - Cours du Soir) - Clickable sections */}
+                {/* ── CDS Row Header ── */}
+                {displayFilieresCols.some(col => (col.cdsList && col.cdsList.length > 0) || (col.cdsProfs && col.cdsProfs.length > 0) || col.anneeExtra) && (
+                  <tr>
+                    <td
+                      colSpan={displayFilieresCols.length}
+                      style={{
+                        background: 'linear-gradient(90deg, #f59e0b 0%, #fbbf24 50%, #f59e0b 100%)',
+                        color: '#000000',
+                        fontWeight: 900,
+                        fontSize: 12,
+                        letterSpacing: 1.5,
+                        textAlign: 'center',
+                        padding: '6px 8px',
+                        borderTop: '1.5px solid #000000',
+                        borderBottom: '1.5px solid #000000',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      {lang === 'ar' ? 'الدراسة الليلية — Cours du Soir (CDS)' : 'COURS DU SOIR (CDS)'}
+                    </td>
+                  </tr>
+                )}
+
+                {/* ── CDS Groups Row (top, like section links) ── */}
                 <tr style={{ background: '#ffffff', fontWeight: 800 }}>
                   {displayFilieresCols.map((col, colIdx) => {
                     const cds = col.cdsList || (col.anneeExtra ? [col.anneeExtra] : [])
@@ -2728,15 +2835,15 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                       <td
                         key={colIdx}
                         style={{
-                          padding: '3px 2px',
-                          borderRight: colIdx < displayFilieresCols.length - 1 ? '1.5px solid #000' : 'none',
-                          fontSize: 11,
-                          color: '#475569',
-                          verticalAlign: 'middle'
+                          padding: '4px 3px',
+                          borderRight: colIdx < displayFilieresCols.length - 1 ? '1.5px solid #000000' : 'none',
+                          borderBottom: '1.5px solid #000000',
+                          verticalAlign: 'middle',
+                          minHeight: 28
                         }}
                       >
                         {cds.length > 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
                             {cds.map((cdsCode, cIdx) => (
                               <button
                                 key={cIdx}
@@ -2746,28 +2853,89 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                                   width: '100%',
                                   border: 'none',
                                   background: 'transparent',
-                                  fontWeight: 800,
-                                  fontSize: cds.length > 1 ? 10 : 11,
-                                  color: '#7c3aed',
+                                  fontWeight: 900,
+                                  fontSize: cds.length > 1 ? 11 : 12,
+                                  color: '#1d4ed8',
                                   cursor: 'pointer',
-                                  padding: '1px 0',
+                                  padding: '2px 0',
                                   textDecoration: 'underline',
                                   transition: 'transform 0.1s, color 0.1s',
                                   whiteSpace: 'nowrap'
                                 }}
-                                onMouseEnter={(e) => { e.currentTarget.style.color = '#5b21b6'; e.currentTarget.style.transform = 'scale(1.05)' }}
-                                onMouseLeave={(e) => { e.currentTarget.style.color = '#7c3aed'; e.currentTarget.style.transform = 'scale(1)' }}
-                                title={`Voir le planning de la section ${cdsCode}`}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = '#1e3a8a'
+                                  e.currentTarget.style.transform = 'scale(1.06)'
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = '#1d4ed8'
+                                  e.currentTarget.style.transform = 'scale(1)'
+                                }}
+                                title={`Ouvrir l'emploi du temps CDS de ${cdsCode}`}
                               >
                                 {cdsCode}
                               </button>
                             ))}
                           </div>
-                        ) : null}
+                        ) : (
+                          <div style={{ height: 24 }} />
+                        )}
                       </td>
                     )
                   })}
                 </tr>
+
+                {/* ── CDS Separator ── */}
+                <tr>
+                  {displayFilieresCols.map((_, colIdx) => (
+                    <td key={colIdx} style={{ height: 8, background: '#fffbeb', borderRight: colIdx < displayFilieresCols.length - 1 ? '1.5px solid #000' : 'none', borderBottom: '1px solid #fde68a' }}></td>
+                  ))}
+                </tr>
+
+                {/* ── CDS Formateurs rows (cyan cells, click to open evening timetable) ── */}
+                {Array.from({ length: maxCdsProfsRows }).map((_, rowIdx) => (
+                  <tr key={`cds-prof-${rowIdx}`}>
+                    {displayFilieresCols.map((col, colIdx) => {
+                      const prof = col.cdsProfs?.[rowIdx]
+                      const matches = !searchTerm || (prof && prof.toLowerCase().includes(searchTerm.toLowerCase()))
+                      return (
+                        <td
+                          key={colIdx}
+                          style={{
+                            padding: '3px 4px',
+                            borderRight: colIdx < displayFilieresCols.length - 1 ? '1.5px solid #000' : 'none',
+                            borderBottom: rowIdx === maxCdsProfsRows - 1 ? '1.5px solid #000' : '1px solid #e2e8f0',
+                            height: 28,
+                            background: prof ? (matches ? '#22d3ee' : '#e0f2fe') : '#ffffff'
+                          }}
+                        >
+                          {prof ? (
+                            <button
+                              type="button"
+                              onClick={() => openFormateurSchedule(prof, col.filiere, true)}
+                              style={{
+                                width: '100%',
+                                border: 'none',
+                                background: 'transparent',
+                                fontWeight: 900,
+                                fontSize: 12.5,
+                                color: '#000000',
+                                cursor: 'pointer',
+                                padding: '2px 0',
+                                textTransform: 'uppercase',
+                                transition: 'transform 0.1s, color 0.1s'
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.color = '#1e3a8a'; e.currentTarget.style.transform = 'scale(1.04)' }}
+                              onMouseLeave={(e) => { e.currentTarget.style.color = '#000000'; e.currentTarget.style.transform = 'scale(1)' }}
+                              title={`Ouvrir l'emploi du temps (Soir/CDS) de ${prof}`}
+                            >
+                              {prof}
+                            </button>
+                          ) : null}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

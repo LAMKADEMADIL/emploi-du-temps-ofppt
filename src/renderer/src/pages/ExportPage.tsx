@@ -105,7 +105,7 @@ export default function ExportPage(): React.ReactElement {
 
     JOURS_LIST.forEach(jour => {
       const jourUpper = jour.toUpperCase()
-      for (let sIdx = 0; sIdx < 4; sIdx++) {
+      for (let sIdx = 0; sIdx <= 4; sIdx++) {
         grid[`${jourUpper}__${sIdx}`] = null
       }
     })
@@ -118,10 +118,14 @@ export default function ExportPage(): React.ReactElement {
       const cellJour = parts[0].toUpperCase()
       const salleNom = parts[1].toUpperCase()
       const tsIdx = parseInt(parts[2], 10)
-      if (isNaN(tsIdx) || tsIdx < 0 || tsIdx > 3) continue
+      if (isNaN(tsIdx) || tsIdx < 0 || tsIdx > 4) continue
 
       const cellGrp = String(cell.groupeId).toUpperCase().replace(/\s+/g, '')
-      const matchesGroup = (targetGroupe.id && targetGroupe.id === cell.groupeId) || cellGrp === grpCodeNorm
+      const matchesGroup =
+        (targetGroupe.id && targetGroupe.id === cell.groupeId) ||
+        cellGrp === grpCodeNorm ||
+        (grpCodeNorm && cellGrp.includes(grpCodeNorm)) ||
+        (cellGrp && grpCodeNorm.includes(cellGrp))
 
       if (matchesGroup) {
         const formateur = formateurs.find(f =>
@@ -146,10 +150,17 @@ export default function ExportPage(): React.ReactElement {
     // 2. From seances (fallback/secondary)
     for (const seance of seancesList) {
       const seanceGrp = String(seance.code_groupe || seance.id_groupe || '').toUpperCase().replace(/\s+/g, '')
-      const matchesGroup = (targetGroupe.id && targetGroupe.id === seance.id_groupe) || seanceGrp === grpCodeNorm
+      const matchesGroup =
+        (targetGroupe.id && targetGroupe.id === seance.id_groupe) ||
+        seanceGrp === grpCodeNorm ||
+        (grpCodeNorm && seanceGrp.includes(seanceGrp)) ||
+        (seanceGrp && grpCodeNorm.includes(seanceGrp))
       if (!matchesGroup) continue
 
-      const tsIdx = ['08:30', '11:00', '13:30', '16:00'].indexOf(seance.heure_debut)
+      let tsIdx = ['08:30', '11:00', '13:30', '16:00'].indexOf(seance.heure_debut)
+      if (tsIdx === -1 && (seance.heure_debut === '18:30' || seance.heure_debut === '18h30' || /18/i.test(seance.heure_debut))) {
+        tsIdx = 4
+      }
       if (tsIdx === -1) continue
 
       const cellJour = (seance.jour || '').toUpperCase()
@@ -177,7 +188,7 @@ export default function ExportPage(): React.ReactElement {
 
     JOURS_LIST.forEach(jour => {
       const jourUpper = jour.toUpperCase()
-      for (let sIdx = 0; sIdx < 4; sIdx++) {
+      for (let sIdx = 0; sIdx <= 4; sIdx++) {
         grid[`${jourUpper}__${sIdx}`] = null
       }
     })
@@ -190,7 +201,7 @@ export default function ExportPage(): React.ReactElement {
       const cellJour = parts[0].toUpperCase()
       const salleNom = parts[1].toUpperCase()
       const tsIdx = parseInt(parts[2], 10)
-      if (isNaN(tsIdx) || tsIdx < 0 || tsIdx > 3) continue
+      if (isNaN(tsIdx) || tsIdx < 0 || tsIdx > 4) continue
 
       const cellProfNorm = String(cell.formateurId).toUpperCase().trim()
       const matchesProf = (targetFormateur.id && targetFormateur.id === cell.formateurId) ||
@@ -216,7 +227,10 @@ export default function ExportPage(): React.ReactElement {
         (seance.nom_formateur && seance.nom_formateur.toUpperCase() === profNameNorm)
       if (!matchesProf) continue
 
-      const tsIdx = ['08:30', '11:00', '13:30', '16:00'].indexOf(seance.heure_debut)
+      let tsIdx = ['08:30', '11:00', '13:30', '16:00'].indexOf(seance.heure_debut)
+      if (tsIdx === -1 && (seance.heure_debut === '18:30' || seance.heure_debut === '18h30' || /18/i.test(seance.heure_debut))) {
+        tsIdx = 4
+      }
       if (tsIdx === -1) continue
 
       const cellJour = (seance.jour || '').toUpperCase()
@@ -364,10 +378,19 @@ export default function ExportPage(): React.ReactElement {
     doc.text(periode, rightColX + 38, metaTopY + 25)
 
     // ── 4. Official Timetable Matrix (Image 1 Style) ──
+    const isCds = /CDS/i.test(targetCodeOrName) ||
+      /CDS/i.test(metaData['Groupe'] || '') ||
+      metaData['isCds'] === 'true' ||
+      /CDS/i.test(metaData['Masse'] || '')
+
+    const customCdsHour = localStorage.getItem('custom_cds_hour') || '18H30 À 21H00'
+    const activeTsLabels = isCds ? [customCdsHour] : TS_LABELS
+    const numSlots = activeTsLabels.length
+
     const tableTopY = metaTopY + 29
     const col1Width = 32 // Jour column
     const col2Width = 24 // Groupe/Module/salle column
-    const slotWidth = (contentWidth - col1Width - col2Width) / 4 // 54.25mm per slot
+    const slotWidth = (contentWidth - col1Width - col2Width) / numSlots
     const tableHeaderHeight = 8
     const subRowHeight = 5.6 // 3 sub-rows = 16.8mm per day
 
@@ -385,7 +408,7 @@ export default function ExportPage(): React.ReactElement {
     doc.line(marginX, tableTopY + tableHeaderHeight, marginX + col1Width + col2Width, tableTopY)
 
     // Time Slot Headers
-    TS_LABELS.forEach((slotLabel, sIdx) => {
+    activeTsLabels.forEach((slotLabel, sIdx) => {
       const slotX = marginX + col1Width + col2Width + sIdx * slotWidth
       doc.text(slotLabel, slotX + slotWidth / 2, tableTopY + 5.5, { align: 'center' })
       if (sIdx > 0) {
@@ -428,13 +451,15 @@ export default function ExportPage(): React.ReactElement {
       })
 
       // Time slots content
-      for (let sIdx = 0; sIdx < 4; sIdx++) {
-        const slotX = marginX + col1Width + col2Width + sIdx * slotWidth
-        if (sIdx > 0) {
-          doc.line(slotX, dayTopY, slotX, dayTopY + dayTotalHeight)
-        }
+      if (isCds) {
+        const slotX = marginX + col1Width + col2Width
+        // Look for cell in slot 4 (evening slot), or fallback to any filled slot
+        const cell = grid[`${jourUpper}__4`] ||
+          grid[`${jourUpper}__0`] ||
+          grid[`${jourUpper}__1`] ||
+          grid[`${jourUpper}__2`] ||
+          grid[`${jourUpper}__3`]
 
-        const cell = grid[`${jourUpper}__${sIdx}`]
         if (cell) {
           // Sub-row 1 (Groupe or Module)
           doc.setFont('helvetica', 'bold')
@@ -452,6 +477,33 @@ export default function ExportPage(): React.ReactElement {
           doc.setFont('helvetica', 'normal')
           doc.setFontSize(7.5)
           doc.text(cell.salle || '', slotX + slotWidth / 2, dayTopY + subRowHeight * 2 + subRowHeight / 2 + 1, { align: 'center' })
+        }
+      } else {
+        for (let sIdx = 0; sIdx < 4; sIdx++) {
+          const slotX = marginX + col1Width + col2Width + sIdx * slotWidth
+          if (sIdx > 0) {
+            doc.line(slotX, dayTopY, slotX, dayTopY + dayTotalHeight)
+          }
+
+          const cell = grid[`${jourUpper}__${sIdx}`]
+          if (cell) {
+            // Sub-row 1 (Groupe or Module)
+            doc.setFont('helvetica', 'bold')
+            doc.setFontSize(8.5)
+            const line1 = type === 'formateur' ? cell.groupe : cell.module
+            doc.text(line1 || '', slotX + slotWidth / 2, dayTopY + subRowHeight / 2 + 1, { align: 'center' })
+
+            // Sub-row 2 (Module or Formateur)
+            doc.setFont('helvetica', 'normal')
+            doc.setFontSize(8)
+            const line2 = type === 'formateur' ? cell.module : cell.formateur
+            doc.text(line2 || '', slotX + slotWidth / 2, dayTopY + subRowHeight + subRowHeight / 2 + 1, { align: 'center' })
+
+            // Sub-row 3 (salle)
+            doc.setFont('helvetica', 'normal')
+            doc.setFontSize(7.5)
+            doc.text(cell.salle || '', slotX + slotWidth / 2, dayTopY + subRowHeight * 2 + subRowHeight / 2 + 1, { align: 'center' })
+          }
         }
       }
     })
@@ -672,6 +724,7 @@ export default function ExportPage(): React.ReactElement {
   // ── Helper: Build dynamic Meta for Groupe ──────────────────────────────
   function buildGroupeMeta(g: Groupe) {
     const grpCode = g.code_groupe.trim()
+    const isCds = /CDS/i.test(grpCode)
     const filCode = extractFiliereFromGroup(grpCode)
     const filiereObj = filieres.find(f => f.id === g.id_filiere || f.code_filiere.toUpperCase() === filCode)
     const filiereDisplay = filiereObj ? filiereObj.code_filiere : (filCode || g.filiere || 'Filière')
@@ -686,7 +739,8 @@ export default function ExportPage(): React.ReactElement {
       'Filière': filiereDisplay,
       'Niveau': anneeLabel,
       'Période': periode,
-      'Masse': 'FPA / Résidentiel'
+      'Masse': isCds ? 'Cours du Soir (CDS)' : 'FPA / Résidentiel',
+      'isCds': isCds ? 'true' : 'false'
     }
   }
 

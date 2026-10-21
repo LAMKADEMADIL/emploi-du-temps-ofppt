@@ -564,30 +564,67 @@ export default function DnaPage(): React.ReactElement {
                             >
                               <option value="" style={{ color: '#9ca3af' }}>-</option>
                               {useFiliereMode
-                                ? filieres.map(f => {
-                                    const annees = f.nombre_annees || 2
-                                    return (
-                                      <optgroup key={f.id} label={f.code_filiere}>
-                                        {Array.from({ length: annees }, (_, i) => {
-                                          const code = `${f.code_filiere}${(i + 1) * 100}`
-                                          return (
-                                            <option key={code} value={code} style={{ color: '#1f2937' }}>
-                                              {code}
-                                            </option>
-                                          )
-                                        })}
+                                ? (() => {
+                                    // Regular FPA groups (not CDS) generated from filieres
+                                    const fpaOptions = filieres.map(f => {
+                                      const annees = f.nombre_annees || 2
+                                      return (
+                                        <optgroup key={f.id} label={f.code_filiere}>
+                                          {Array.from({ length: annees }, (_, i) => {
+                                            const code = `${f.code_filiere}${(i + 1) * 100}`
+                                            return (
+                                              <option key={code} value={code} style={{ color: '#1f2937' }}>
+                                                {code}
+                                              </option>
+                                            )
+                                          })}
+                                        </optgroup>
+                                      )
+                                    })
+                                    // CDS groups from the actual groupes database
+                                    const cdsGroupes = groupes.filter(g => /CDS/i.test(g.code_groupe))
+                                    const cdsOption = cdsGroupes.length > 0 ? (
+                                      <optgroup key="__CDS__" label={`${lang === 'ar' ? 'الدراسة الليلية' : 'Cours du Soir'} (CDS)`}>
+                                        {cdsGroupes.map(g => (
+                                          <option key={g.id || g.code_groupe} value={g.code_groupe} style={{ color: '#7c3aed', fontWeight: 700 }}>
+                                            {g.code_groupe}
+                                          </option>
+                                        ))}
                                       </optgroup>
+                                    ) : null
+                                    return [...fpaOptions, cdsOption]
+                                  })()
+                                : (() => {
+                                    // Fallback mode: separate CDS groups visually
+                                    const fpaGroupesByFiliere = Object.entries(groupedByFiliere).filter(([_, gs]) =>
+                                      gs.some(g => !/CDS/i.test(g.code_groupe))
                                     )
-                                  })
-                                : Object.entries(groupedByFiliere).map(([filiereName, filiereGroupes]) => (
-                                    <optgroup key={filiereName} label={filiereName}>
-                                      {filiereGroupes.map(g => (
-                                        <option key={g.id} value={g.code_groupe} style={{ color: '#1f2937' }}>
-                                          {g.code_groupe}
-                                        </option>
-                                      ))}
-                                    </optgroup>
-                                  ))
+                                    const cdsGroupesByFiliere = Object.entries(groupedByFiliere).filter(([_, gs]) =>
+                                      gs.some(g => /CDS/i.test(g.code_groupe))
+                                    )
+                                    return [
+                                      ...fpaGroupesByFiliere.map(([filiereName, filiereGroupes]) => (
+                                        <optgroup key={filiereName} label={filiereName}>
+                                          {filiereGroupes.filter(g => !/CDS/i.test(g.code_groupe)).map(g => (
+                                            <option key={g.id} value={g.code_groupe} style={{ color: '#1f2937' }}>
+                                              {g.code_groupe}
+                                            </option>
+                                          ))}
+                                        </optgroup>
+                                      )),
+                                      cdsGroupesByFiliere.length > 0 ? (
+                                        <optgroup key="__CDS_FB__" label={`${lang === 'ar' ? 'الدراسة الليلية' : 'Cours du Soir'} (CDS)`}>
+                                          {cdsGroupesByFiliere.flatMap(([_, gs]) =>
+                                            gs.filter(g => /CDS/i.test(g.code_groupe)).map(g => (
+                                              <option key={g.id} value={g.code_groupe} style={{ color: '#7c3aed', fontWeight: 700 }}>
+                                                {g.code_groupe}
+                                              </option>
+                                            ))
+                                          )}
+                                        </optgroup>
+                                      ) : null
+                                    ]
+                                  })()
                               }
                             </select>
                           </td>

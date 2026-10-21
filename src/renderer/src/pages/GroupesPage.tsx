@@ -197,8 +197,8 @@ export default function GroupesPage(): React.ReactElement {
               <p>{lang === 'ar' ? 'قم بإضافة الأفواج للبدء في جدولة الحصص' : 'Ajoutez des groupes pour commencer la planification'}</p>
             </div>
           ) : (() => {
-            // Compute virtual columns based on nombre_annees (default 2)
-            const virtualCols = filieres.flatMap(f => {
+            // Separate day (FPA) groups from night (CDS) groups
+            const dayVirtualCols = filieres.flatMap(f => {
               const annees = f.nombre_annees || 2;
               const cols: any[] = [];
               for (let i = 1; i <= annees; i++) {
@@ -207,22 +207,42 @@ export default function GroupesPage(): React.ReactElement {
                   filiere: f,
                   label: `${f.code_filiere}${i}00`,
                   prefix: i.toString(),
-                  groupes: groupes.filter(g => g.id_filiere === f.id && (g.code_groupe.match(/\d+/) ? g.code_groupe.match(/\d+/)![0].startsWith(i.toString()) : (i === 1))).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
+                  groupes: groupes.filter(g =>
+                    g.id_filiere === f.id &&
+                    !/CDS/i.test(g.code_groupe) &&
+                    (g.code_groupe.match(/\d+/) ? g.code_groupe.match(/\d+/)![0].startsWith(i.toString()) : (i === 1))
+                  ).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
                 });
               }
               return cols;
             })
 
-            const maxGroupCount = virtualCols.length > 0 ? Math.max(0, ...virtualCols.map(c => c.groupes.length)) : 0;
-            const rowCount = Math.max(1, maxGroupCount + 1); // Always leave at least one empty row at the bottom for easy adding
+            // CDS groups - grouped per filière
+            const cdsVirtualCols = filieres.flatMap(f => {
+              const cdsForFiliere = groupes.filter(g =>
+                g.id_filiere === f.id && /CDS/i.test(g.code_groupe)
+              ).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
+              if (cdsForFiliere.length === 0) return []
+              return [{
+                id: `${f.id}-cds`,
+                filiere: f,
+                label: `${f.code_filiere} CDS`,
+                isCds: true,
+                groupes: cdsForFiliere
+              }]
+            })
+
+            const maxGroupCount = dayVirtualCols.length > 0 ? Math.max(0, ...dayVirtualCols.map(c => c.groupes.length)) : 0;
+            const rowCount = Math.max(1, maxGroupCount + 1);
 
             return (
               <div className="table-wrapper" style={{ overflowX: 'auto', paddingBottom: 10 }}>
+                {/* ── FPA Main Table (Day Courses) ── */}
                 <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: '100%', border: '1.5px solid #000' }}>
                   <thead>
                     <tr style={{ background: '#f5dadf' }}>
                       <th style={{ width: 40, textAlign: 'center', border: '1.5px solid #000', padding: '10px', color: '#000' }}>#</th>
-                      {virtualCols.map(col => (
+                      {dayVirtualCols.map(col => (
                         <th key={col.id} style={{ textAlign: 'center', border: '1.5px solid #000', padding: '10px', color: '#000', fontWeight: 'bold' }}>
                           {col.label}
                         </th>
@@ -235,7 +255,7 @@ export default function GroupesPage(): React.ReactElement {
                         <td style={{ textAlign: 'center', fontWeight: 'bold', border: '1.5px solid #000', background: '#f8fafc', color: '#000' }}>
                           {rowIndex + 1}
                         </td>
-                        {virtualCols.map(col => {
+                        {dayVirtualCols.map(col => {
                           const groupe = col.groupes[rowIndex]
                           return (
                             <td 
@@ -250,7 +270,6 @@ export default function GroupesPage(): React.ReactElement {
                               }}
                               onClick={() => {
                                 if (!groupe) {
-                                  // Suggest the code based on the row. e.g. TEMI 100 -> Row 1 -> TEMI101
                                   const suggestedNumber = (rowIndex + 1).toString().padStart(2, '0');
                                   const defaultCode = `${col.filiere.code_filiere}${col.prefix}${suggestedNumber}`;
                                   openModal(undefined, col.filiere.id, defaultCode);
@@ -297,10 +316,139 @@ export default function GroupesPage(): React.ReactElement {
                     ))}
                   </tbody>
                 </table>
-                <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280', display: 'flex', gap: 16, alignItems: 'center' }}>
+
+                {/* ── CDS Isolated Section (Cours du Soir) ── */}
+                {cdsVirtualCols.length > 0 && (
+                  <div style={{ marginTop: 24 }}>
+                    {/* CDS Section Header Banner — same style as main table */}
+                    <div style={{
+                      background: '#f5dadf',
+                      color: '#000',
+                      fontWeight: 900,
+                      fontSize: 13,
+                      letterSpacing: 2,
+                      padding: '10px 16px',
+                      border: '1.5px solid #000',
+                      borderBottom: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      textTransform: 'uppercase'
+                    }}>
+                      <span>
+                        {lang === 'ar'
+                          ? 'أفواج الدراسة الليلية — Cours du Soir (CDS)'
+                          : 'Cours du Soir (CDS) — Filières du Soir'}
+                      </span>
+                      <span style={{
+                        marginLeft: 'auto',
+                        background: 'rgba(0,0,0,0.08)',
+                        borderRadius: 6,
+                        padding: '2px 10px',
+                        fontSize: 12,
+                        fontWeight: 700
+                      }}>
+                        {cdsVirtualCols.reduce((sum, col) => sum + col.groupes.length, 0)} {lang === 'ar' ? 'فوج' : 'groupe(s)'}
+                      </span>
+                    </div>
+
+                    <table style={{ borderCollapse: 'collapse', width: 'max-content', minWidth: '100%', border: '1.5px solid #000' }}>
+                      <thead>
+                        <tr style={{ background: '#f5dadf' }}>
+                          <th style={{ width: 40, textAlign: 'center', border: '1.5px solid #000', padding: '10px', color: '#000' }}>#</th>
+                          {cdsVirtualCols.map(col => (
+                            <th key={col.id} style={{
+                              textAlign: 'center',
+                              border: '1.5px solid #000',
+                              padding: '10px',
+                              color: '#000',
+                              fontWeight: 900,
+                              minWidth: 120
+                            }}>
+                              {col.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: Math.max(1, Math.max(0, ...cdsVirtualCols.map(c => c.groupes.length)) + 1) }).map((_, rowIndex) => (
+                          <tr key={rowIndex}>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', border: '1.5px solid #000', background: '#f8fafc', color: '#000' }}>
+                              {rowIndex + 1}
+                            </td>
+                            {cdsVirtualCols.map(col => {
+                              const groupe = col.groupes[rowIndex]
+                              return (
+                                <td
+                                  key={col.id}
+                                  style={{
+                                    textAlign: 'center',
+                                    border: '1.5px solid #000',
+                                    padding: '4px',
+                                    minWidth: 120,
+                                    cursor: groupe ? 'default' : 'pointer',
+                                    background: groupe ? 'transparent' : '#ffffff'
+                                  }}
+                                  onClick={() => {
+                                    if (!groupe) {
+                                      const defaultCode = `${col.filiere.code_filiere}${rowIndex + 1}00CDS`;
+                                      openModal(undefined, col.filiere.id, defaultCode);
+                                    }
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!groupe) e.currentTarget.style.background = '#f1f5f9'
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!groupe) e.currentTarget.style.background = '#ffffff'
+                                  }}
+                                  title={!groupe ? (lang === 'ar' ? 'انقر لإضافة فوج ليلي هنا' : 'Cliquez pour ajouter un groupe CDS') : undefined}
+                                >
+                                  {groupe ? (
+                                    <div
+                                      onClick={(e) => { e.stopPropagation(); openModal(groupe); }}
+                                      style={{
+                                        cursor: 'pointer',
+                                        background: groupe.en_stage ? '#fef3c7' : 'transparent',
+                                        color: groupe.en_stage ? '#b45309' : '#000',
+                                        padding: '6px 4px',
+                                        fontWeight: 700,
+                                        fontSize: '14px',
+                                        borderRadius: 4,
+                                        transition: 'background 0.2s'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (!groupe.en_stage) e.currentTarget.style.background = '#e0e7ff'
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        if (!groupe.en_stage) e.currentTarget.style.background = 'transparent'
+                                      }}
+                                      title={lang === 'ar' ? 'انقر للتعديل' : 'Cliquez pour modifier'}
+                                    >
+                                      {groupe.code_groupe}
+                                    </div>
+                                  ) : (
+                                    <div style={{ height: '100%', minHeight: '28px' }}></div>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 12, height: 12, background: '#fef3c7', borderRadius: 2, border: '1px solid #fcd34d' }}></div>
                     {lang === 'ar' ? 'في فترة تدريب (Stage)' : 'En Stage'}
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 12, height: 12, background: '#ede9fe', borderRadius: 2, border: '1px solid #c084fc' }}></div>
+                    <span style={{ color: '#7c3aed', fontWeight: 600 }}>
+                      {lang === 'ar' ? 'أفواج الدراسة الليلية (CDS)' : 'Cours du Soir (CDS)'}
+                    </span>
                   </span>
                 </div>
               </div>
