@@ -69,13 +69,13 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
                 style={{ 
                   width: '100%', 
                   height: '100%', 
-                  borderRadius: '50%',
+                  borderRadius:'50%',
                   objectFit: 'contain'
                 }} 
               />
             </div>
             <div className="sidebar-logo-text">
-              <h2>Gestion du Temps</h2>
+              <h2>Gestion du Temps </h2>
               <span>OFPPT - ISTA</span>
             </div>
           </div>
@@ -113,7 +113,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
             )
           })}
         </nav>
-
+    
         <div className="sidebar-footer">
           <div className="connection-badge" style={{ fontSize: '13px', padding: '9px 12px' }}>
             <div className="connection-dot" />

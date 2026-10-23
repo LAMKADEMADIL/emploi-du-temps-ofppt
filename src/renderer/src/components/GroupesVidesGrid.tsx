@@ -4,9 +4,11 @@ import {
   X,
   ArrowLeft,
   Trash2,
-  Layers
+  Layers,
+  FileDown
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import * as XLSX from 'xlsx'
 import { filieresService, groupesService, planningSallesService, formateursService } from '../services/firebaseService'
 import type { Filiere, Groupe, Formateur } from '../types'
 
@@ -306,6 +308,96 @@ export default function GroupesVidesGrid({
     )
   }
 
+  // ── Export Excel (EMPLOI DU TEMPS DE LA SECTION) ───────────────────────────
+  function handleExportExcel() {
+    if (selectedCodes.length === 0) {
+      toast.error('Veuillez sélectionner une filière avant de télécharger.')
+      return
+    }
+
+    const wb = XLSX.utils.book_new()
+
+    // One sheet per filière code selected
+    selectedCodes.forEach(code => {
+      const groups = filiereGroupes
+
+      // ── Header rows ──────────────────────────────────────────────────────────
+      const headerRows: (string | null)[][] = [
+        ['EMPLOI DU TEMPS DE LA SECTION', null, null, null, null, null],
+        [`ANNEE DE FORMATION : ${new Date().getFullYear()}-${new Date().getFullYear() + 1}`, null, null, null, null, null],
+        [],
+        ['DRGC'],
+        ['Complexe/EFP : CFP IMME / ISTA MY RACHID'],
+        [`Filière : ${code}`],
+        [],
+      ]
+
+      // ── Table header ─────────────────────────────────────────────────────────
+      const tableHeader1 = ['HEURE', '8H30 À 11H00', '11H00 À 13H30', '13H30 À 16H00', '16H00 À 18H30']
+      const tableHeader2 = ['JOUR / GROUPE', ...Array(4).fill('')]
+
+      const aoa: (string | null)[][] = [
+        ...headerRows,
+        tableHeader1,
+        tableHeader2,
+      ]
+
+      // ── Data rows (one row per jour, one sub-row per groupe) ─────────────────
+      JOURS.forEach(jour => {
+        let firstGroupInJour = true
+        if (groups.length === 0) {
+          aoa.push([jour, '', '', '', ''])
+        } else {
+          groups.forEach(grp => {
+            const row: (string | null)[] = []
+            row.push(firstGroupInJour ? jour : null)
+            firstGroupInJour = false
+
+            TIMESLOT_LABELS.forEach((_, tsIdx) => {
+              if (isCleared) {
+                row.push('')
+              } else {
+                const status = getGroupStatus(grp, jour, tsIdx)
+                if (status.isOccupied) {
+                  row.push(`${status.formateurName || ''} AT ${status.salleName || ''}`)
+                } else {
+                  row.push('')
+                }
+              }
+            })
+            aoa.push(row)
+          })
+          // separator row between days
+          aoa.push(['', '', '', '', ''])
+        }
+      })
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+
+      // Column widths
+      ws['!cols'] = [
+        { wch: 18 },
+        { wch: 30 },
+        { wch: 30 },
+        { wch: 30 },
+        { wch: 30 },
+      ]
+
+      // Merge title cells
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // EMPLOI DU TEMPS...
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }, // ANNEE DE FORMATION
+      ]
+
+      const sheetName = code.replace(/[^a-zA-Z0-9]/g, '').slice(0, 31)
+      XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Section')
+    })
+
+    const fileName = `EmploiTempsSection_${selectedCodes.join('_')}_${new Date().toISOString().slice(0, 10)}.xlsx`
+    XLSX.writeFile(wb, fileName)
+    toast.success(`Fichier Excel téléchargé : ${fileName}`)
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* ── Toolbar ───────────────────────────────────────────────────────────── */}
@@ -439,6 +531,33 @@ export default function GroupesVidesGrid({
           >
             <Trash2 size={15} />
             {isCleared ? 'Afficher' : 'Vide'}
+          </button>
+
+          {/* Button Télécharger Excel */}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: '1.5px solid #16a34a',
+              background: '#16a34a',
+              color: '#ffffff',
+              fontSize: '13px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(22,163,74,0.25)',
+              transition: 'all 0.18s'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#15803d' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#16a34a' }}
+            title="Télécharger l'emploi du temps en Excel"
+          >
+            <FileDown size={15} />
+            Télécharger Excel
           </button>
 
           {/* Button Retour */}

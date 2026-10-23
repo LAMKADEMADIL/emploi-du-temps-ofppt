@@ -257,6 +257,25 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
     }
   }
 
+  // ── 0. Ensemble des formateurs affectés à la Communication (pour les masquer du tableau principal) ─
+  const commProfsSet = useMemo(() => {
+    if (!formateurs || formateurs.length === 0) return new Set<string>()
+    const names = new Set<string>()
+    DEFAULT_COMM_COLS.forEach(col => {
+      formateurs.forEach(f => {
+        if (
+          matchesModule(f.matiere, col.module) ||
+          matchesModule(f.specialite, col.module) ||
+          f.groupes_assignes?.some(g => matchesModule(g, col.module))
+        ) {
+          const name = (f.nom || f.nom_prenom || '').toUpperCase()
+          if (name) names.add(name)
+        }
+      })
+    })
+    return names
+  }, [formateurs])
+
   // ── 1. Filières triées par ordre alphabétique (Alphabetical Order) ─────────
   const displayFilieresCols = useMemo(() => {
     const isCds = (code: string) => /CDS/i.test(code)
@@ -336,7 +355,7 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
 
         return {
           filiere: f.code_filiere,
-          profs: assignedDayProfs,
+          profs: assignedDayProfs.filter(p => !commProfsSet.has(p)),
           cdsProfs: assignedCdsProfs,
           annee1,
           annee2,
@@ -370,12 +389,12 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
         return {
           ...col,
           cdsList,
-          profs: formateurs && formateurs.length > 0 ? col.profs : [],
+          profs: (formateurs && formateurs.length > 0 ? col.profs : []).filter(p => !commProfsSet.has(p)),
           cdsProfs: fallbackCdsProfs
         }
       })
       .sort((a, b) => a.filiere.localeCompare(b.filiere))
-  }, [filieres, formateurs, groupes, planningSallesMap])
+  }, [filieres, formateurs, groupes, planningSallesMap, commProfsSet])
 
   // Calcul dynamique du nombre de lignes pour afficher TOUS les formateurs affectés sans aucune coupure
   const maxFilieresProfsRows = useMemo(() => {
