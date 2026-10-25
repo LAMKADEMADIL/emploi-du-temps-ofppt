@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   FileDown,
   Users,
@@ -11,7 +11,6 @@ import {
   AlertTriangle,
   FileText,
   Files,
-  BookOpen,
   Layers
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -67,8 +66,8 @@ export default function ExportPage(): React.ReactElement {
   // Multi-selection checkboxes
   const [selectedFormateurIds, setSelectedFormateurIds] = useState<Set<string>>(new Set())
   const [selectedGroupeIds, setSelectedGroupeIds] = useState<Set<string>>(new Set())
-  const [selectedFiliereIds, setSelectedFiliereIds] = useState<Set<string>>(new Set())
-  const [searchFiliere, setSearchFiliere] = useState('')
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(new Set())
+  const [searchSection, setSearchSection] = useState('')
 
   const { lang } = useTranslation()
 
@@ -613,15 +612,6 @@ export default function ExportPage(): React.ReactElement {
     return g.code_groupe.toLowerCase().includes(term)
   })
 
-  const filteredFilieres = filieres.filter(f => {
-    const term = searchFiliere.toLowerCase().trim()
-    if (!term) return true
-    return (
-      f.code_filiere.toLowerCase().includes(term) ||
-      f.nom_filiere.toLowerCase().includes(term)
-    )
-  })
-
   function toggleSelectAllFormateurs() {
     if (selectedFormateurIds.size === filteredFormateurs.length) {
       setSelectedFormateurIds(new Set())
@@ -650,21 +640,6 @@ export default function ExportPage(): React.ReactElement {
     if (next.has(id)) next.delete(id)
     else next.add(id)
     setSelectedGroupeIds(next)
-  }
-
-  function toggleSelectAllFilieres() {
-    if (selectedFiliereIds.size === filteredFilieres.length) {
-      setSelectedFiliereIds(new Set())
-    } else {
-      setSelectedFiliereIds(new Set(filteredFilieres.map(f => f.id || f.code_filiere)))
-    }
-  }
-
-  function toggleSelectFiliere(id: string) {
-    const next = new Set(selectedFiliereIds)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setSelectedFiliereIds(next)
   }
 
   // ── Helper: Extract exact Filière code from group code ──────────────────
@@ -1119,11 +1094,107 @@ export default function ExportPage(): React.ReactElement {
   // Get groups of a filiere filtered by year digit (1 = 1ère année, 2 = 2ème année)
   function getGroupesForFiliereByYear(targetFiliere: Filiere, yearDigit: '1' | '2'): Groupe[] {
     return getGroupesForFiliere(targetFiliere).filter(g => {
+      if (/CDS/i.test(g.code_groupe)) return false
       const code = g.code_groupe.toUpperCase().replace(/\s+/g, '')
       const yearMatch = code.match(/([1-9])\d\d/)
       if (!yearMatch) return false
       return yearMatch[1] === yearDigit
     }).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe))
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECTION ITEMS: Structure sections as CPA100, CPA200, AEFGT100, etc.
+  // ══════════════════════════════════════════════════════════════════════════
+  interface SectionItem {
+    id: string
+    code_section: string
+    filiereCode: string
+    filiereNom: string
+    digit: '1' | '2' | '3'
+    anneeLabel: string
+    groupes: Groupe[]
+    filiereObj?: Filiere
+    isCds?: boolean
+  }
+
+  const allSections = useMemo<SectionItem[]>(() => {
+    const list: SectionItem[] = []
+    const anneeItems: { digit: '1' | '2'; label: string; suffix: string }[] = [
+      { digit: '1', label: 'T 1ère Année', suffix: '100' },
+      { digit: '2', label: 'T 2ème Année', suffix: '200' }
+    ]
+
+    for (const fil of filieres) {
+      const filCode = fil.code_filiere.replace(/[\\/:*?"<>|]/g, '_').trim()
+      if (!filCode) continue
+
+      for (const { digit, label, suffix } of anneeItems) {
+        const secGroupes = getGroupesForFiliereByYear(fil, digit)
+        if (secGroupes.length > 0) {
+          const codeSec = `${filCode}${suffix}`
+          list.push({
+            id: codeSec,
+            code_section: codeSec,
+            filiereCode: fil.code_filiere,
+            filiereNom: fil.nom_filiere || '',
+            digit,
+            anneeLabel: label,
+            groupes: secGroupes,
+            filiereObj: fil
+          })
+        }
+      }
+
+      // Check CDS groups for this filière (e.g. RVA100CDS, TEMI100CDS)
+      const filGrps = getGroupesForFiliere(fil)
+      const cdsGrps = filGrps.filter(g => /CDS/i.test(g.code_groupe))
+      if (cdsGrps.length > 0) {
+        const cdsCode = cdsGrps[0].code_groupe.toUpperCase().replace(/\s+/g, '')
+        const codeSec = /^\w+\d+CDS/i.test(cdsCode) ? cdsCode : `${filCode}100CDS`
+        if (!list.some(s => s.code_section === codeSec)) {
+          list.push({
+            id: codeSec,
+            code_section: codeSec,
+            filiereCode: fil.code_filiere,
+            filiereNom: fil.nom_filiere ? `${fil.nom_filiere} (CDS)` : 'Cours du Soir',
+            digit: '1',
+            anneeLabel: 'Cours du Soir (CDS)',
+            groupes: cdsGrps,
+            filiereObj: fil,
+            isCds: true
+          })
+        }
+      }
+    }
+
+    return list.sort((a, b) => a.code_section.localeCompare(b.code_section))
+  }, [filieres, groupes])
+
+  const filteredSections = useMemo(() => {
+    const term = searchSection.toLowerCase().trim()
+    if (!term) return allSections
+    return allSections.filter(sec =>
+      sec.code_section.toLowerCase().includes(term) ||
+      sec.filiereCode.toLowerCase().includes(term) ||
+      sec.filiereNom.toLowerCase().includes(term) ||
+      sec.anneeLabel.toLowerCase().includes(term) ||
+      sec.groupes.some(g => g.code_groupe.toLowerCase().includes(term))
+    )
+  }, [allSections, searchSection])
+
+  function toggleSelectAllSections() {
+    if (selectedSectionIds.size === filteredSections.length && filteredSections.length > 0) {
+      setSelectedSectionIds(new Set())
+    } else {
+      setSelectedSectionIds(new Set(filteredSections.map(s => s.id)))
+    }
+  }
+
+  function toggleSelectSection(id: string) {
+    const next = new Set(selectedSectionIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedSectionIds(next)
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1216,14 +1287,16 @@ export default function ExportPage(): React.ReactElement {
     const anneeFormation = localStorage.getItem('annee_formation_groupe') || '2025-2026'
     const periode = localStorage.getItem('periode_application_groupe') || 'Octobre 2026'
     const numGroups = sectionGroupes.length || 1
-    const TS = ['8H30 \u00c0 11H00', '11H00 \u00c0 13H30', '13H30 \u00c0 16H00', '16H00 \u00c0 18H30']
+    const isCdsSection = sectionGroupes.some(g => /CDS/i.test(g.code_groupe)) || /CDS/i.test(anneeLabel)
+    const customCdsHour = localStorage.getItem('custom_cds_hour') || '18H30 \u00c0 21H00'
+    const TS = isCdsSection ? [customCdsHour] : ['8H30 \u00c0 11H00', '11H00 \u00c0 13H30', '13H30 \u00c0 16H00', '16H00 \u00c0 18H30']
     const JOURS = ['LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI']
     const numDays = JOURS.length // always 6
 
     // Fixed column widths
     const col1W = 18  // JOUR column
     const col2W = 20  // GROUPE column
-    const slotW = (contentW - col1W - col2W) / 4
+    const slotW = (contentW - col1W - col2W) / TS.length
 
     // Fixed header heights (compact)
     const hdrH = 5   // each header row
@@ -1332,8 +1405,9 @@ export default function ExportPage(): React.ReactElement {
         doc.text(groupe.code_groupe, mX + col1W + col2W / 2, textMidY, { align: 'center' })
 
         // Time slot cells
-        for (let tsIdx = 0; tsIdx < 4; tsIdx++) {
-          const sx = mX + col1W + col2W + tsIdx * slotW
+        for (let sIdx = 0; sIdx < TS.length; sIdx++) {
+          const tsIdx = isCdsSection ? 4 : sIdx
+          const sx = mX + col1W + col2W + sIdx * slotW
 
           if (groupe.en_stage) {
             doc.setFillColor(241, 245, 249)
@@ -1410,303 +1484,41 @@ export default function ExportPage(): React.ReactElement {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Export Section PDF: one PDF page per filiere+year containing ALL groups in rows
+  // EXPORT SINGLE SECTION: e.g. CPA100.pdf or CPA200.pdf
   // ══════════════════════════════════════════════════════════════════════════
-
-  async function exportSectionsPdf(yearDigit: '1' | '2') {
-    const anneeLabel = yearDigit === '1' ? 'T 1ère Année' : 'T 2ème Année'
-    const folderName = `Emplois_du_Temps_Section_Annee${yearDigit}`
-    const fileName = `Sections_Annee${yearDigit}_Emploi_du_Temps.pdf`
-
-    // Collect all filieres that have at least one group in this year
-    const activeFilieres = filieres.filter(fil => getGroupesForFiliereByYear(fil, yearDigit).length > 0)
-
-    if (activeFilieres.length === 0) {
-      toast.error(
-        lang === 'ar'
-          ? `لا توجد أفواج مسجلة للسنة ${yearDigit === '1' ? 'الأولى' : 'الثانية'}`
-          : `Aucun groupe trouvé pour l'année ${yearDigit}`
-      )
-      return
-    }
-
-    try {
-      setBulkProgress({ current: 0, total: activeFilieres.length, label: 'Génération des Sections PDF...' })
-
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-
-      for (let i = 0; i < activeFilieres.length; i++) {
-        const fil = activeFilieres[i]
-        const sectionGroupes = getGroupesForFiliereByYear(fil, yearDigit)
-
-        setBulkProgress({
-          current: i + 1,
-          total: activeFilieres.length,
-          label: lang === 'ar'
-            ? `جاري إنشاء جدول الشعبة: ${fil.code_filiere} (${i + 1}/${activeFilieres.length})...`
-            : `Génération section ${fil.code_filiere} (${i + 1}/${activeFilieres.length})...`
-        })
-
-        if (i > 0) doc.addPage('a4', 'landscape')
-
-        const schedule = buildSectionScheduleMap(sectionGroupes)
-        drawSectionPage(doc, fil.code_filiere, anneeLabel, sectionGroupes, schedule, i, activeFilieres.length)
-
-        if (i % 4 === 0) await new Promise(r => setTimeout(r, 10))
-      }
-
-      const res = await savePdfFile(folderName, fileName, doc)
-
-      if (res && res.success) {
-        setLastExportPath({ folderName, targetDir: res.targetDir || folderName, filePath: res.filePath || fileName })
-        toast.success(
-          (t) => (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>
-                {lang === 'ar'
-                  ? `🎉 تم تصدير ${activeFilieres.length} شعبة (سنة ${yearDigit === '1' ? 'أولى' : 'ثانية'}) في ملف PDF واحد!`
-                  : `🎉 ${activeFilieres.length} sections année ${yearDigit} exportées dans 1 PDF !`}
-              </div>
-              <button
-                className="btn btn-secondary btn-sm"
-                style={{ marginTop: 4, alignSelf: 'flex-start', padding: '4px 10px', fontSize: 12, gap: 5 }}
-                onClick={() => { toast.dismiss(t.id); handleOpenFolder(res.targetDir) }}
-              >
-                <FolderOpen size={14} />
-                {lang === 'ar' ? 'فتح المجلد' : 'Ouvrir le dossier'}
-              </button>
-            </div>
-          ),
-          { duration: 8000 }
-        )
-      } else {
-        toast.error(lang === 'ar' ? 'حدث خطأ أثناء حفظ الملف' : 'Erreur de sauvegarde')
-      }
-    } catch (err: any) {
-      console.error(err)
-      toast.error(lang === 'ar' ? `خطأ: ${err?.message || ''}` : `Erreur: ${err?.message || ''}`)
-    } finally {
-      setBulkProgress(null)
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // FILIERE COMBINED PDF: All groups of the filière in one PDF (multi-page)
-  // ══════════════════════════════════════════════════════════════════════════
-  async function exportFiliereCombinedPdf(targetFilieres: Filiere[]) {
-    if (targetFilieres.length === 0) {
-      toast.error(lang === 'ar' ? 'الرجاء تحديد شعبة واحدة على الأقل' : 'Veuillez sélectionner au moins une filière')
-      return
-    }
-
-    const folderName = 'Emplois_du_Temps_Filieres'
-    const fileName = targetFilieres.length === 1
-      ? `Filiere_${targetFilieres[0].code_filiere}_Emploi_du_Temps.pdf`
-      : `Filieres_(${targetFilieres.length})_Emploi_du_Temps.pdf`
-
-    // Collect all groups across selected filieres
-    const allGroups: Groupe[] = []
-    for (const fil of targetFilieres) {
-      const grps = getGroupesForFiliere(fil)
-      allGroups.push(...grps)
-    }
-
-    if (allGroups.length === 0) {
-      toast.error(lang === 'ar' ? 'لا توجد أفواج مرتبطة بهذه الشعبة' : 'Aucun groupe trouvé pour cette filière')
-      return
-    }
-
-    try {
-      setBulkProgress({ current: 0, total: allGroups.length, label: 'Génération PDF Filière...' })
-
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-
-      for (let i = 0; i < allGroups.length; i++) {
-        const g = allGroups[i]
-        const grpCode = g.code_groupe.trim()
-
-        setBulkProgress({
-          current: i + 1,
-          total: allGroups.length,
-          label: lang === 'ar'
-            ? `جاري إضافة الفوج: ${grpCode} (${i + 1}/${allGroups.length})...`
-            : `Ajout du groupe ${grpCode} (${i + 1}/${allGroups.length})...`
-        })
-
-        if (i > 0) doc.addPage('a4', 'landscape')
-
-        const grid = buildGroupeSchedule(g)
-        const meta = buildGroupeMeta(g)
-        drawOfficialOfpptPage(doc, 'groupe', grpCode, meta, grid, i, allGroups.length)
-
-        if (i % 6 === 0) await new Promise(r => setTimeout(r, 10))
-      }
-
-      const res = await savePdfFile(folderName, fileName, doc)
-
-      if (res && res.success) {
-        setLastExportPath({ folderName, targetDir: res.targetDir || folderName, filePath: res.filePath || fileName })
-        toast.success(
-          (t) => (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>
-                {lang === 'ar'
-                  ? `🎉 تم تصدير ${allGroups.length} فوج في ملف PDF واحد!`
-                  : `🎉 ${allGroups.length} groupes exportés dans 1 PDF !`}
-              </div>
-              <button
-                className="btn btn-secondary btn-sm"
-                style={{ marginTop: 4, alignSelf: 'flex-start', padding: '4px 10px', fontSize: 12, gap: 5 }}
-                onClick={() => { toast.dismiss(t.id); handleOpenFolder(res.targetDir) }}
-              >
-                <FolderOpen size={14} />
-                {lang === 'ar' ? 'فتح المجلد' : 'Ouvrir le dossier'}
-              </button>
-            </div>
-          ),
-          { duration: 8000 }
-        )
-      } else {
-        toast.error(lang === 'ar' ? 'حدث خطأ أثناء حفظ الملف' : 'Erreur de sauvegarde')
-      }
-    } catch (err: any) {
-      console.error(err)
-      toast.error(lang === 'ar' ? `خطأ: ${err?.message || ''}` : `Erreur: ${err?.message || ''}`)
-    } finally {
-      setBulkProgress(null)
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // FILIERE SEPARATE PDF: One PDF per filière (all groups inside each)
-  // ══════════════════════════════════════════════════════════════════════════
-  async function exportFiliereSeparateFiles(targetFilieres: Filiere[], isSingle = false) {
-    if (targetFilieres.length === 0) {
-      toast.error(lang === 'ar' ? 'الرجاء تحديد شعبة واحدة على الأقل' : 'Veuillez sélectionner au moins une filière')
-      return
-    }
-
-    const folderName = 'Emplois_du_Temps_Filieres'
-    try {
-      if (!isSingle) {
-        setBulkProgress({ current: 0, total: targetFilieres.length, label: 'Préparation des fichiers...' })
-      }
-
-      let successCount = 0
-      let lastSavedDir = ''
-
-      for (let i = 0; i < targetFilieres.length; i++) {
-        const fil = targetFilieres[i]
-        const filCode = fil.code_filiere.replace(/[\\/:*?"<>|]/g, '_')
-        const grps = getGroupesForFiliere(fil)
-
-        if (!isSingle) {
-          setBulkProgress({
-            current: i + 1,
-            total: targetFilieres.length,
-            label: lang === 'ar' ? `جاري تصدير الشعبة: ${fil.code_filiere}...` : `Export de la filière ${fil.code_filiere}...`
-          })
-        }
-
-        if (grps.length === 0) continue
-
-        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-        for (let j = 0; j < grps.length; j++) {
-          const g = grps[j]
-          if (j > 0) doc.addPage('a4', 'landscape')
-          const grid = buildGroupeSchedule(g)
-          const meta = buildGroupeMeta(g)
-          drawOfficialOfpptPage(doc, 'groupe', g.code_groupe.trim(), meta, grid, j, grps.length)
-          if (j % 6 === 0) await new Promise(r => setTimeout(r, 10))
-        }
-
-        const fileName = `Filiere_${filCode}_Emploi_du_Temps.pdf`
-        const res = await savePdfFile(folderName, fileName, doc)
-        if (res && res.success) {
-          successCount++
-          lastSavedDir = res.targetDir
-        }
-      }
-
-      setLastExportPath({ folderName, targetDir: lastSavedDir || folderName, filePath: folderName })
-
-      if (isSingle) {
-        toast.success(lang === 'ar' ? 'تم تنزيل جدول الشعبة بنجاح!' : 'Planning filière exporté avec succès !')
-      } else {
-        toast.success(
-          lang === 'ar'
-            ? `🎉 تم حفظ جداول الشعب (${successCount}) كملفات منفصلة داخل مجلد [${folderName}]!`
-            : `🎉 ${successCount} fichiers enregistrés dans [${folderName}] sur le Bureau !`
-        )
-      }
-    } catch (err: any) {
-      console.error(err)
-      toast.error(lang === 'ar' ? `خطأ: ${err?.message || ''}` : `Erreur: ${err?.message || ''}`)
-    } finally {
-      setBulkProgress(null)
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // SECTION FORMAT per filière: ESA100.pdf (year1) + ESA200.pdf (year2)
-  // "Télécharger" button on each filière row calls this
-  // ══════════════════════════════════════════════════════════════════════════
-  async function exportFiliereSectionFiles(targetFiliere: Filiere) {
-    const filCode = targetFiliere.code_filiere.replace(/[\\/:*?"<>|]/g, '_')
+  async function exportSingleSection(sec: SectionItem) {
     const folderName = 'PDFchaqueGroupes'
+    const fileName = `${sec.code_section}.pdf`
 
-    const anneeItems: { digit: '1' | '2'; label: string }[] = [
-      { digit: '1', label: 'T 1er Année' },
-      { digit: '2', label: 'T 2ème Année' }
-    ]
-
-    const yearsWithGroups = anneeItems.filter(
-      ({ digit }) => getGroupesForFiliereByYear(targetFiliere, digit).length > 0
-    )
-
-    if (yearsWithGroups.length === 0) {
-      toast.error(lang === 'ar' ? 'لا توجد أفواج لهذه الشعبة' : 'Aucun groupe trouvé pour cette filière')
+    if (sec.groupes.length === 0) {
+      toast.error(lang === 'ar' ? 'لا توجد أفواج في هذا القسم' : 'Aucun groupe dans cette section')
       return
     }
 
     try {
-      setExportingId(targetFiliere.id || targetFiliere.code_filiere)
-      let lastSavedDir = ''
-      let savedCount = 0
+      setExportingId(sec.code_section)
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const schedule = buildSectionScheduleMap(sec.groupes)
+      drawSectionPage(doc, sec.filiereCode, sec.anneeLabel, sec.groupes, schedule)
 
-      for (const { digit, label } of yearsWithGroups) {
-        const sectionGroupes = getGroupesForFiliereByYear(targetFiliere, digit)
-        if (sectionGroupes.length === 0) continue
-
-        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-        const schedule = buildSectionScheduleMap(sectionGroupes)
-        drawSectionPage(doc, targetFiliere.code_filiere, label, sectionGroupes, schedule)
-
-        const fileName = `${filCode}${digit}00.pdf`
-        const res = await savePdfFile(folderName, fileName, doc)
-        if (res && res.success) {
-          savedCount++
-          lastSavedDir = res.targetDir
-        }
-      }
-
-      if (savedCount > 0) {
-        setLastExportPath({ folderName, targetDir: lastSavedDir || folderName, filePath: folderName })
+      const res = await savePdfFile(folderName, fileName, doc)
+      if (res && res.success) {
+        setLastExportPath({ folderName, targetDir: res.targetDir || folderName, filePath: res.filePath || fileName })
         toast.success(
           (t) => (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ fontWeight: 800, fontSize: 14 }}>
                 {lang === 'ar'
-                  ? `✅ تم حفظ ${savedCount} ملف Section لشعبة ${targetFiliere.code_filiere}!`
-                  : `✅ ${savedCount} fichier(s) Section pour ${targetFiliere.code_filiere} !`}
+                  ? `✅ تم حفظ ملف القسم [${fileName}] بنجاح!`
+                  : `✅ Fichier Section [${fileName}] enregistré !`}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                {yearsWithGroups.map(y => `${filCode}${y.digit}00.pdf`).join(' + ')}
+                {sec.groupes.map(g => g.code_groupe).join(', ')}
               </div>
               <button
                 className="btn btn-secondary btn-sm"
                 style={{ marginTop: 4, alignSelf: 'flex-start', padding: '4px 10px', fontSize: 12, gap: 5 }}
-                onClick={() => { toast.dismiss(t.id); handleOpenFolder(lastSavedDir) }}
+                onClick={() => { toast.dismiss(t.id); handleOpenFolder(res.targetDir) }}
               >
                 <FolderOpen size={14} />
                 {lang === 'ar' ? 'فتح المجلد' : 'Ouvrir le dossier'}
@@ -1716,7 +1528,7 @@ export default function ExportPage(): React.ReactElement {
           { duration: 7000 }
         )
       } else {
-        toast.error(lang === 'ar' ? 'حدث خطأ أثناء الحفظ' : 'Erreur lors de la sauvegarde')
+        toast.error(lang === 'ar' ? 'حدث خطأ أثناء حفظ الملف' : 'Erreur lors de la sauvegarde')
       }
     } catch (err: any) {
       console.error(err)
@@ -1726,55 +1538,37 @@ export default function ExportPage(): React.ReactElement {
     }
   }
 
-  // Export ALL filières as Section PDFs into PDFchaqueGroupes folder
-  async function exportAllFiliereSectionFiles(targetFilieres: Filiere[]) {
-    if (targetFilieres.length === 0) {
-      toast.error(lang === 'ar' ? 'الرجاء تحديد شعبة واحدة على الأقل' : 'Veuillez sélectionner au moins une filière')
+  // ══════════════════════════════════════════════════════════════════════════
+  // EXPORT MULTIPLE SECTIONS: 1 file per section into PDFchaqueGroupes folder
+  // ══════════════════════════════════════════════════════════════════════════
+  async function exportMultipleSections(targetSections: SectionItem[]) {
+    if (targetSections.length === 0) {
+      toast.error(lang === 'ar' ? 'الرجاء تحديد قسم واحد على الأقل' : 'Veuillez sélectionner au moins une section')
       return
     }
 
     const folderName = 'PDFchaqueGroupes'
-    const anneeItems: { digit: '1' | '2'; label: string }[] = [
-      { digit: '1', label: 'T 1er Année' },
-      { digit: '2', label: 'T 2ème Année' }
-    ]
-
-    const tasks: { fil: Filiere; digit: '1' | '2'; label: string }[] = []
-    for (const fil of targetFilieres) {
-      for (const { digit, label } of anneeItems) {
-        if (getGroupesForFiliereByYear(fil, digit).length > 0) {
-          tasks.push({ fil, digit, label })
-        }
-      }
-    }
-
-    if (tasks.length === 0) {
-      toast.error(lang === 'ar' ? 'لا توجد أفواج مسجلة' : 'Aucun groupe trouvé')
-      return
-    }
 
     try {
-      setBulkProgress({ current: 0, total: tasks.length, label: 'Génération Section PDFs...' })
+      setBulkProgress({ current: 0, total: targetSections.length, label: 'Génération Section PDFs...' })
 
       let successCount = 0
       let lastSavedDir = ''
 
-      for (let i = 0; i < tasks.length; i++) {
-        const { fil, digit, label } = tasks[i]
-        const filCode = fil.code_filiere.replace(/[\\/:*?"<>|]/g, '_')
-        const sectionGroupes = getGroupesForFiliereByYear(fil, digit)
+      for (let i = 0; i < targetSections.length; i++) {
+        const sec = targetSections[i]
+        const fileName = `${sec.code_section}.pdf`
 
         setBulkProgress({
           current: i + 1,
-          total: tasks.length,
-          label: `${filCode}${digit}00.pdf (${i + 1}/${tasks.length})...`
+          total: targetSections.length,
+          label: `${fileName} (${i + 1}/${targetSections.length})...`
         })
 
         const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-        const schedule = buildSectionScheduleMap(sectionGroupes)
-        drawSectionPage(doc, fil.code_filiere, label, sectionGroupes, schedule)
+        const schedule = buildSectionScheduleMap(sec.groupes)
+        drawSectionPage(doc, sec.filiereCode, sec.anneeLabel, sec.groupes, schedule)
 
-        const fileName = `${filCode}${digit}00.pdf`
         const res = await savePdfFile(folderName, fileName, doc)
         if (res && res.success) {
           successCount++
@@ -1791,7 +1585,7 @@ export default function ExportPage(): React.ReactElement {
             <div style={{ fontWeight: 800, fontSize: 14 }}>
               {lang === 'ar'
                 ? `🎉 تم حفظ ${successCount} ملف Section في مجلد [${folderName}]!`
-                : `🎉 ${successCount} fichiers Section dans [${folderName}] !`}
+                : `🎉 ${successCount} fichiers Section enregistrés dans [${folderName}] !`}
             </div>
             <button
               className="btn btn-secondary btn-sm"
@@ -1805,6 +1599,76 @@ export default function ExportPage(): React.ReactElement {
         ),
         { duration: 8000 }
       )
+    } catch (err: any) {
+      console.error(err)
+      toast.error(lang === 'ar' ? `خطأ: ${err?.message || ''}` : `Erreur: ${err?.message || ''}`)
+    } finally {
+      setBulkProgress(null)
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // EXPORT SECTIONS COMBINED: 1 single PDF with 1 page per section
+  // ══════════════════════════════════════════════════════════════════════════
+  async function exportSectionsCombinedPdf(targetSections: SectionItem[]) {
+    if (targetSections.length === 0) {
+      toast.error(lang === 'ar' ? 'الرجاء تحديد قسم واحد على الأقل' : 'Veuillez sélectionner au moins une section')
+      return
+    }
+
+    const folderName = 'PDFchaqueGroupes'
+    const fileName = targetSections.length === allSections.length
+      ? 'Toutes_les_Sections_Emploi_du_Temps.pdf'
+      : `Sections_(${targetSections.length})_Emploi_du_Temps.pdf`
+
+    try {
+      setBulkProgress({ current: 0, total: targetSections.length, label: 'Génération du PDF combiné des Sections...' })
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+      for (let i = 0; i < targetSections.length; i++) {
+        const sec = targetSections[i]
+
+        setBulkProgress({
+          current: i + 1,
+          total: targetSections.length,
+          label: `${sec.code_section} (${i + 1}/${targetSections.length})...`
+        })
+
+        if (i > 0) doc.addPage('a4', 'landscape')
+
+        const schedule = buildSectionScheduleMap(sec.groupes)
+        drawSectionPage(doc, sec.filiereCode, sec.anneeLabel, sec.groupes, schedule, i, targetSections.length)
+
+        if (i % 4 === 0) await new Promise(r => setTimeout(r, 10))
+      }
+
+      const res = await savePdfFile(folderName, fileName, doc)
+      if (res && res.success) {
+        setLastExportPath({ folderName, targetDir: res.targetDir || folderName, filePath: res.filePath || fileName })
+        toast.success(
+          (t) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>
+                {lang === 'ar'
+                  ? `🎉 تم حفظ ${targetSections.length} قسم في ملف PDF واحد مجمع!`
+                  : `🎉 ${targetSections.length} sections enregistrées dans 1 fichier PDF !`}
+              </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                style={{ marginTop: 4, alignSelf: 'flex-start', padding: '4px 10px', fontSize: 12, gap: 5 }}
+                onClick={() => { toast.dismiss(t.id); handleOpenFolder(res.targetDir) }}
+              >
+                <FolderOpen size={14} />
+                {lang === 'ar' ? 'فتح المجلد' : 'Ouvrir le dossier'}
+              </button>
+            </div>
+          ),
+          { duration: 8000 }
+        )
+      } else {
+        toast.error(lang === 'ar' ? 'حدث خطأ أثناء حفظ الملف' : 'Erreur de sauvegarde')
+      }
     } catch (err: any) {
       console.error(err)
       toast.error(lang === 'ar' ? `خطأ: ${err?.message || ''}` : `Erreur: ${err?.message || ''}`)
@@ -2328,22 +2192,22 @@ export default function ExportPage(): React.ReactElement {
             </div>
 
             {/* ══════════════════════════════════════════════════════════
-                CARD 3: PLANNINGS DES FILIERES
+                CARD 3: EMPLOIS DU TEMPS DES SECTIONS (CPA100, CPA200...)
             ══════════════════════════════════════════════════════════ */}
             <div className="card" style={{ padding: '24px', border: '1.5px solid rgba(124, 58, 237, 0.4)' }}>
               <div className="card-header" style={{ marginBottom: 16 }}>
                 <h3 className="card-title" style={{ fontSize: '18px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <BookOpen size={22} color="#7c3aed" />
-                  {lang === 'ar' ? 'جداول الشعب (Filieres)' : 'Plannings des Filières'}
+                  <Layers size={22} color="#7c3aed" />
+                  {lang === 'ar' ? 'جداول الأقسام (Sections: CPA100, CPA200...)' : 'Emploi du Temps des Sections (CPA100, CPA200...)'}
                 </h3>
                 <span className="badge" style={{ fontSize: 12, background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed', border: '1px solid #7c3aed' }}>
-                  {filieres.length} {lang === 'ar' ? 'شعبة' : 'filières'}
+                  {allSections.length} {lang === 'ar' ? 'قسم' : 'sections'}
                 </span>
               </div>
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-                {/* 1 SINGLE PDF BUTTON */}
+                {/* 1 FILE PER SECTION BUTTON (Main button) */}
                 <button
                   className="btn btn-primary"
                   style={{
@@ -2353,18 +2217,18 @@ export default function ExportPage(): React.ReactElement {
                     fontWeight: 800,
                     gap: '10px',
                     background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-                    boxShadow: '0 4px 14px rgba(124, 58, 237, 0.3)'
+                    boxShadow: '0 4px 14px rgba(124, 58, 237, 0.35)'
                   }}
-                  disabled={!!bulkProgress}
-                  onClick={() => exportFiliereCombinedPdf(filieres)}
+                  disabled={!!bulkProgress || allSections.length === 0}
+                  onClick={() => exportMultipleSections(allSections)}
                 >
-                  <FileText size={20} />
+                  <Layers size={20} />
                   {lang === 'ar'
-                    ? '📄 تصدير جميع الشعب في ملف PDF واحد مجمع'
-                    : 'Exporter toutes les filières (1 SEUL fichier PDF)'}
+                    ? `📋 تصدير جميع الأقسام (${allSections.length} ملف : CPA100, CPA200...)`
+                    : `Exporter toutes les sections (${allSections.length} fichiers : CPA100, CPA200...)`}
                 </button>
 
-                {/* SEPARATE FILES BUTTON */}
+                {/* 1 SINGLE COMBINED PDF BUTTON */}
                 <button
                   className="btn btn-secondary"
                   style={{
@@ -2376,38 +2240,17 @@ export default function ExportPage(): React.ReactElement {
                     borderColor: '#7c3aed',
                     color: '#7c3aed'
                   }}
-                  disabled={!!bulkProgress}
-                  onClick={() => exportFiliereSeparateFiles(filieres)}
+                  disabled={!!bulkProgress || allSections.length === 0}
+                  onClick={() => exportSectionsCombinedPdf(allSections)}
                 >
-                  <Files size={17} />
+                  <FileText size={17} />
                   {lang === 'ar'
-                    ? '📁 تصدير في ملفات منفصلة (ملف مستقل لكل شعبة)'
-                    : 'Exporter en fichiers séparés (1 par filière)'}
-                </button>
-
-                {/* SECTION PDF BUTTON - exports ESA100.pdf, ESA200.pdf etc. */}
-                <button
-                  className="btn btn-primary"
-                  style={{
-                    width: '100%',
-                    padding: '13px 20px',
-                    fontSize: '15px',
-                    fontWeight: 800,
-                    gap: '10px',
-                    background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                    boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)'
-                  }}
-                  disabled={!!bulkProgress}
-                  onClick={() => exportAllFiliereSectionFiles(filieres)}
-                >
-                  <Layers size={20} />
-                  {lang === 'ar'
-                    ? '📋 تصدير جداول القسم (Section) ملف منفصل لكل شعبة/سنة'
-                    : 'Exporter Sections PDF (ESA100, ESA200... 1 fichier / filière / année)'}
+                    ? '📄 تصدير جميع الأقسام في ملف PDF واحد مجمع'
+                    : 'Exporter toutes les sections (1 SEUL fichier PDF)'}
                 </button>
 
                 {/* Selected Action Buttons */}
-                {selectedFiliereIds.size > 0 && (
+                {selectedSectionIds.size > 0 && (
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -2418,7 +2261,7 @@ export default function ExportPage(): React.ReactElement {
                     borderRadius: 8
                   }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>
-                      {lang === 'ar' ? `المحددة (${selectedFiliereIds.size} شعب):` : `Sélection (${selectedFiliereIds.size} filières) :`}
+                      {lang === 'ar' ? `المحددة (${selectedSectionIds.size} قسم):` : `Sélection (${selectedSectionIds.size} sections) :`}
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button
@@ -2426,12 +2269,12 @@ export default function ExportPage(): React.ReactElement {
                         style={{ flex: 1, padding: '8px 10px', fontSize: '12.5px', fontWeight: 700, gap: '6px', background: '#7c3aed' }}
                         disabled={!!bulkProgress}
                         onClick={() => {
-                          const selectedList = filieres.filter(f => selectedFiliereIds.has(f.id || f.code_filiere))
-                          exportFiliereCombinedPdf(selectedList)
+                          const selectedList = allSections.filter(s => selectedSectionIds.has(s.id))
+                          exportMultipleSections(selectedList)
                         }}
                       >
-                        <FileText size={15} />
-                        {lang === 'ar' ? 'ملف واحد مجمع' : '1 seul PDF'}
+                        <Files size={15} />
+                        {lang === 'ar' ? 'ملفات منفصلة' : 'Fichiers séparés'}
                       </button>
 
                       <button
@@ -2439,12 +2282,12 @@ export default function ExportPage(): React.ReactElement {
                         style={{ flex: 1, padding: '8px 10px', fontSize: '12.5px', fontWeight: 600, gap: '6px' }}
                         disabled={!!bulkProgress}
                         onClick={() => {
-                          const selectedList = filieres.filter(f => selectedFiliereIds.has(f.id || f.code_filiere))
-                          exportFiliereSeparateFiles(selectedList)
+                          const selectedList = allSections.filter(s => selectedSectionIds.has(s.id))
+                          exportSectionsCombinedPdf(selectedList)
                         }}
                       >
-                        <Files size={15} />
-                        {lang === 'ar' ? 'ملفات منفصلة' : 'Fichiers séparés'}
+                        <FileText size={15} />
+                        {lang === 'ar' ? 'ملف واحد مجمع' : '1 seul PDF'}
                       </button>
                     </div>
                   </div>
@@ -2456,9 +2299,9 @@ export default function ExportPage(): React.ReactElement {
                 <Search size={16} style={{ position: 'absolute', top: 12, left: lang === 'ar' ? undefined : 12, right: lang === 'ar' ? 12 : undefined, color: 'var(--text-secondary)' }} />
                 <input
                   type="text"
-                  placeholder={lang === 'ar' ? 'بحث عن شعبة (مثال: AEFGT, TREM)...' : 'Rechercher une filière (ex: AEFGT)...'}
-                  value={searchFiliere}
-                  onChange={(e) => setSearchFiliere(e.target.value)}
+                  placeholder={lang === 'ar' ? 'بحث عن قسم (مثال: CPA100, AEFGT, 100)...' : 'Rechercher une section (ex: CPA100, AEFGT, 100)...'}
+                  value={searchSection}
+                  onChange={(e) => setSearchSection(e.target.value)}
                   style={{
                     width: '100%',
                     padding: lang === 'ar' ? '9px 36px 9px 12px' : '9px 12px 9px 36px',
@@ -2482,10 +2325,10 @@ export default function ExportPage(): React.ReactElement {
                   marginBottom: 12,
                   cursor: 'pointer'
                 }}
-                onClick={toggleSelectAllFilieres}
+                onClick={toggleSelectAllSections}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13 }}>
-                  {selectedFiliereIds.size === filteredFilieres.length && filteredFilieres.length > 0 ? (
+                  {selectedSectionIds.size === filteredSections.length && filteredSections.length > 0 ? (
                     <CheckSquare size={18} color="#7c3aed" />
                   ) : (
                     <Square size={18} color="var(--text-secondary)" />
@@ -2493,20 +2336,19 @@ export default function ExportPage(): React.ReactElement {
                   <span>{lang === 'ar' ? 'تحديد الكل (Select All)' : 'Tout sélectionner'}</span>
                 </div>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {selectedFiliereIds.size} / {filteredFilieres.length} {lang === 'ar' ? 'محدد' : 'sélectionné(s)'}
+                  {selectedSectionIds.size} / {filteredSections.length} {lang === 'ar' ? 'محدد' : 'sélectionné(s)'}
                 </span>
               </div>
 
-              {/* Filiere List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 340, overflowY: 'auto', paddingRight: 6 }}>
-                {filteredFilieres.map((fil) => {
-                  const fId = fil.id || fil.code_filiere
-                  const isSelected = selectedFiliereIds.has(fId)
-                  const grpsCount = getGroupesForFiliere(fil).length
+              {/* Section List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 380, overflowY: 'auto', paddingRight: 6 }}>
+                {filteredSections.map((sec) => {
+                  const isSelected = selectedSectionIds.has(sec.id)
+                  const isExportingThis = exportingId === sec.code_section
 
                   return (
                     <div
-                      key={fId}
+                      key={sec.id}
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -2520,7 +2362,7 @@ export default function ExportPage(): React.ReactElement {
                     >
                       <div
                         style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }}
-                        onClick={() => toggleSelectFiliere(fId)}
+                        onClick={() => toggleSelectSection(sec.id)}
                       >
                         {isSelected ? (
                           <CheckSquare size={19} color="#7c3aed" />
@@ -2528,185 +2370,67 @@ export default function ExportPage(): React.ReactElement {
                           <Square size={19} color="var(--text-secondary)" />
                         )}
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: 0.5 }}>
-                            {fil.code_filiere}
-                          </span>
-                          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                            {fil.nom_filiere}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: 0.5 }}>
+                              {sec.code_section}
+                            </span>
+                            <span style={{
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: 4,
+                              background: sec.digit === '1' ? 'rgba(99, 102, 241, 0.12)' : 'rgba(14, 165, 233, 0.12)',
+                              color: sec.digit === '1' ? '#6366f1' : '#0284c7'
+                            }}>
+                              {sec.anneeLabel}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                            {sec.filiereNom && <span>{sec.filiereNom}</span>}
+                            <span>•</span>
+                            <span style={{ color: 'var(--text-tertiary)' }}>
+                              {sec.groupes.map(g => g.code_groupe).join(', ')}
+                            </span>
+                          </div>
                         </div>
-                        <span style={{ fontSize: 11, color: '#7c3aed', background: 'rgba(124, 58, 237, 0.1)', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
-                          {grpsCount} {lang === 'ar' ? 'فوج' : 'groupe(s)'}
-                        </span>
                       </div>
 
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        style={{
-                          padding: '7px 14px',
-                          fontSize: '13px',
-                          fontWeight: 700,
-                          gap: '6px',
-                          color: '#7c3aed',
-                          borderColor: '#7c3aed'
-                        }}
-                        disabled={!!bulkProgress || !!exportingId || grpsCount === 0}
-                        onClick={() => exportFiliereSectionFiles(fil)}
-                        title={lang === 'ar' ? 'تنزيل جدول القسم (Section PDF)' : 'Télécharger Section PDF'}
-                      >
-                        {exportingId === (fil.id || fil.code_filiere) ? (
-                          <RefreshCw size={14} className="animate-spin" />
-                        ) : (
-                          <FileDown size={15} />
-                        )}
-                        {lang === 'ar' ? 'تنزيل Section' : 'Section PDF'}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 11, color: '#7c3aed', background: 'rgba(124, 58, 237, 0.1)', padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>
+                          {sec.groupes.length} {lang === 'ar' ? 'فوج' : 'groupe(s)'}
+                        </span>
+
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            padding: '7px 14px',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            gap: '6px',
+                            color: '#7c3aed',
+                            borderColor: '#7c3aed'
+                          }}
+                          disabled={!!bulkProgress || !!exportingId || sec.groupes.length === 0}
+                          onClick={() => exportSingleSection(sec)}
+                          title={lang === 'ar' ? `تنزيل ${sec.code_section}.pdf` : `Télécharger ${sec.code_section}.pdf`}
+                        >
+                          {isExportingThis ? (
+                            <RefreshCw size={14} className="animate-spin" />
+                          ) : (
+                            <FileDown size={15} />
+                          )}
+                          {lang === 'ar' ? 'Section PDF' : 'Section PDF'}
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
 
-                {filteredFilieres.length === 0 && (
+                {filteredSections.length === 0 && (
                   <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '20px 0' }}>
-                    {lang === 'ar' ? 'لا توجد شعب مطابقة للبحث' : 'Aucune filière trouvée'}
+                    {lang === 'ar' ? 'لا توجد أقسام مطابقة للبحث' : 'Aucune section trouvée'}
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* ══════════════════════════════════════════════════════════
-                CARD 4: EMPLOI DU TEMPS DE LA SECTION (Année 1 & 2)
-            ══════════════════════════════════════════════════════════ */}
-            <div className="card" style={{ padding: '24px', border: '1.5px solid rgba(99, 102, 241, 0.5)', gridColumn: '1 / -1' }}>
-              <div className="card-header" style={{ marginBottom: 18 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <h3 className="card-title" style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Layers size={24} color="#6366f1" />
-                    {lang === 'ar' ? 'جدول استعمال الزمن — القسم (Section)' : 'Emploi du Temps de la Section'}
-                  </h3>
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-                    {lang === 'ar'
-                      ? 'تصدير جميع شعب السنة الأولى أو الثانية — جدول واحد يجمع كل المجموعات في نموذج OFPPT الرسمي (بضبط كالصورة)'
-                      : 'Exporte toutes les sections (Année 1 ou 2) — un tableau par filière regroupant tous les groupes dans le format officiel OFPPT'}
-                  </p>
-                </div>
-                <span className="badge" style={{ fontSize: 12, background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', border: '1px solid #6366f1', alignSelf: 'flex-start' }}>
-                  {filieres.length} {lang === 'ar' ? 'شعبة' : 'filières'}
-                </span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                {/* ANNÉE 1 */}
-                <div style={{
-                  padding: '20px',
-                  borderRadius: 12,
-                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(79, 70, 229, 0.04))',
-                  border: '1.5px solid rgba(99, 102, 241, 0.3)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 8,
-                      background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontWeight: 900, fontSize: 16
-                    }}>1</div>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: 15 }}>
-                        {lang === 'ar' ? 'السنة الأولى — T 1ère Année' : 'Année 1 — T 1ère Année'}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                        {lang === 'ar'
-                          ? `مجموعات السنة الأولى (1xx) من ${filieres.filter(f => getGroupesForFiliereByYear(f, '1').length > 0).length} شعبة`
-                          : `Groupes 1xx de ${filieres.filter(f => getGroupesForFiliereByYear(f, '1').length > 0).length} filières`}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    className="btn btn-primary"
-                    style={{
-                      width: '100%',
-                      padding: '13px 20px',
-                      fontSize: '15px',
-                      fontWeight: 800,
-                      gap: '10px',
-                      background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)'
-                    }}
-                    disabled={!!bulkProgress}
-                    onClick={() => exportSectionsPdf('1')}
-                  >
-                    <FileText size={20} />
-                    {lang === 'ar'
-                      ? '📄 تصدير جداول القسم — السنة الأولى (PDF)'
-                      : 'Exporter Sections Année 1 (PDF)'}
-                  </button>
-                </div>
-
-                {/* ANNÉE 2 */}
-                <div style={{
-                  padding: '20px',
-                  borderRadius: 12,
-                  background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(2, 132, 199, 0.04))',
-                  border: '1.5px solid rgba(14, 165, 233, 0.3)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 8,
-                      background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontWeight: 900, fontSize: 16
-                    }}>2</div>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: 15 }}>
-                        {lang === 'ar' ? 'السنة الثانية — T 2ème Année' : 'Année 2 — T 2ème Année'}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                        {lang === 'ar'
-                          ? `مجموعات السنة الثانية (2xx) من ${filieres.filter(f => getGroupesForFiliereByYear(f, '2').length > 0).length} شعبة`
-                          : `Groupes 2xx de ${filieres.filter(f => getGroupesForFiliereByYear(f, '2').length > 0).length} filières`}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    className="btn btn-primary"
-                    style={{
-                      width: '100%',
-                      padding: '13px 20px',
-                      fontSize: '15px',
-                      fontWeight: 800,
-                      gap: '10px',
-                      background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
-                      boxShadow: '0 4px 14px rgba(14, 165, 233, 0.35)'
-                    }}
-                    disabled={!!bulkProgress}
-                    onClick={() => exportSectionsPdf('2')}
-                  >
-                    <FileText size={20} />
-                    {lang === 'ar'
-                      ? '📄 تصدير جداول القسم — السنة الثانية (PDF)'
-                      : 'Exporter Sections Année 2 (PDF)'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Info note */}
-              <div style={{
-                marginTop: 14,
-                padding: '10px 14px',
-                background: 'rgba(99, 102, 241, 0.06)',
-                border: '1px solid rgba(99, 102, 241, 0.2)',
-                borderRadius: 8,
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8
-              }}>
-                <Layers size={14} color="#6366f1" />
-                <span>
-                  {lang === 'ar'
-                    ? 'كل صفحة PDF تجمع جميع مجموعات الشعبة في جدول واحد بالتنسيق الرسمي OFPPT (EMPLOI DU TEMPS DE LA SECTION) — بضبط كما تراه في الشاشة'
-                    : 'Chaque page PDF regroupe tous les groupes d\'une filière dans un seul tableau au format officiel OFPPT (EMPLOI DU TEMPS DE LA SECTION)'}
-                </span>
               </div>
             </div>
 
