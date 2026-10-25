@@ -1267,7 +1267,62 @@ export default function ExportPage(): React.ReactElement {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Draw a "Section" PDF page (all groups per day in rows) – exact OFPPT layout
+  // Formateur Pastel Palette for Section Timetable (Matches official OFPPT sheet)
+  // ══════════════════════════════════════════════════════════════════════════
+  const SECTION_PASTEL_PALETTE: Array<[number, number, number]> = [
+    [216, 180, 226], // 0: Lilac / Soft Purple (MEBSOUT)
+    [244, 182, 182], // 1: Soft Rose / Pink (BERRADA)
+    [254, 215, 170], // 2: Soft Peach / Warm Orange (DEBBAR)
+    [241, 245, 249], // 3: Soft Slate / Neutral Light Gray (KHOUTAM)
+    [198, 246, 213], // 4: Soft Mint Green
+    [207, 250, 254], // 5: Soft Sky Blue
+    [254, 240, 138], // 6: Soft Pastel Yellow
+    [224, 231, 255], // 7: Soft Lavender
+    [253, 230, 138], // 8: Soft Amber
+    [233, 213, 255], // 9: Soft Violet
+    [204, 251, 241], // 10: Soft Teal
+    [254, 205, 211], // 11: Soft Coral
+  ]
+
+  function getSectionFormateurColor(nom: string): [number, number, number] {
+    if (!nom) return [255, 255, 255]
+    const clean = nom.toUpperCase().trim()
+    if (clean.includes('MEBSOUT')) return [216, 180, 226]
+    if (clean.includes('BERRADA')) return [244, 182, 182]
+    if (clean.includes('DEBBAR'))  return [254, 215, 170]
+    if (clean.includes('KHOUTAM')) return [241, 245, 249]
+
+    let hash = 0
+    for (let i = 0; i < clean.length; i++) {
+      hash = (hash * 31 + clean.charCodeAt(i)) % SECTION_PASTEL_PALETTE.length
+    }
+    return SECTION_PASTEL_PALETTE[Math.abs(hash)]
+  }
+
+  function formatSectionSessionText(nomFormateur: string, nomSalle: string): string {
+    const prof = (nomFormateur || '').trim().toUpperCase()
+    let salle = (nomSalle || '').trim().toUpperCase()
+    if (!salle) return prof
+
+    // Standardize atelier / salle room names
+    if (
+      !salle.startsWith('AT ') &&
+      !salle.startsWith('ATELIER') &&
+      !salle.startsWith('SALLE') &&
+      !salle.startsWith('LABO') &&
+      !salle.startsWith('AMPHI')
+    ) {
+      if (salle === 'PC' || salle.length <= 8) {
+        salle = `AT ${salle}`
+      }
+    }
+
+    return `${prof} - ${salle}`
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Draw "Section" PDF pages (2 Pages: LUN-MER on P1, JEU-SAM + Signatures on P2)
+  // Exact OFPPT 10-row matrix layout with pastel colors & clear typography
   // ══════════════════════════════════════════════════════════════════════════
   function drawSectionPage(
     doc: jsPDF,
@@ -1275,212 +1330,262 @@ export default function ExportPage(): React.ReactElement {
     anneeLabel: string,
     sectionGroupes: Groupe[],
     schedule: Record<string, { nomFormateur: string; nomSalle: string }>,
-    pageIndex?: number,
-    totalPages?: number
+    sectionIndex?: number,
+    totalSections?: number
   ) {
-    const mX = 7    // margin left/right
-    const mY = 5    // margin top/bottom
-    const PW = 297  // A4 landscape width mm
-    const PH = 210  // A4 landscape height mm
-    const contentW = PW - mX * 2
+    const mX = 8     // margin left/right
+    const mY = 4     // margin top
+    const PW = 297   // A4 landscape width mm
+    const PH = 210   // A4 landscape height mm
+    const contentW = PW - mX * 2 // 281 mm
 
     const anneeFormation = localStorage.getItem('annee_formation_groupe') || '2025-2026'
-    const periode = localStorage.getItem('periode_application_groupe') || 'Octobre 2026'
-    const numGroups = sectionGroupes.length || 1
+    const periode = localStorage.getItem('periode_application_groupe') || 'Avril 2026'
     const isCdsSection = sectionGroupes.some(g => /CDS/i.test(g.code_groupe)) || /CDS/i.test(anneeLabel)
     const customCdsHour = localStorage.getItem('custom_cds_hour') || '18H30 \u00c0 21H00'
-    const TS = isCdsSection ? [customCdsHour] : ['8H30 \u00c0 11H00', '11H00 \u00c0 13H30', '13H30 \u00c0 16H00', '16H00 \u00c0 18H30']
-    const JOURS = ['LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI']
-    const numDays = JOURS.length // always 6
+    const TS = isCdsSection
+      ? [customCdsHour]
+      : ['8H30 \u00e0 11H00', '11H00 \u00e0 13H30', '13H30 \u00e0 16H00', '16H00 \u00e0 18H30']
 
     // Fixed column widths
-    const col1W = 18  // JOUR column
-    const col2W = 20  // GROUPE column
-    const slotW = (contentW - col1W - col2W) / TS.length
+    const col1W = 20  // JOUR column
+    const col2W = 22  // GROUPE column
+    const slotW = (contentW - col1W - col2W) / TS.length // 59.75mm for 4 slots
 
-    // Fixed header heights (compact)
-    const hdrH = 5   // each header row
+    // 10 rows per day matrix (standard OFPPT section template)
+    const rowsPerDay = Math.max(10, sectionGroupes.length)
+    const rowH = 4.6  // 4.6mm per row
+    const sepH = 1.2  // separator stripe between days
+    const hdrH = 4.5  // each table header row (2 x 4.5 = 9mm)
 
-    // ── Layout geometry ──
-    // Title block: mY to mY+16 = 16mm
-    // Meta block:  mY+17 to mY+17+24 = 24mm
-    // Table starts at: mY + 16 + 24 = mY + 40
-    const titleBlockH = 16
-    const metaBlockH  = 24
-    const tY = mY + titleBlockH + metaBlockH   // table top Y
-    const headerTotalH = hdrH * 2              // two header rows
-    const bodyStartY = tY + headerTotalH
-    const sigH = 12                            // signature footer height
-    const availableForBody = PH - bodyStartY - sigH - mY - 2
+    // Helper: Draw Table Header (Row 1: HEURE + TimeSlots, Row 2: JOUR + GROUPE)
+    const drawTableHeaders = (startY: number) => {
+      doc.setDrawColor(0, 0, 0).setLineWidth(0.35)
 
-    // Auto-scale: fit all 6 days in available space
-    // dayH = numGroups * rowH + sepH
-    // numDays * dayH <= availableForBody
-    const sepH = 2
-    const totalSepH = numDays * sepH
-    const totalRowSlots = numDays * numGroups
-    const rowH = Math.max(3.5, (availableForBody - totalSepH) / totalRowSlots)
-    const dayH = numGroups * rowH + sepH
+      // Header row 1:
+      // Merged cell over JOUR and GROUPE: "HEURE"
+      doc.setFillColor(200, 200, 200)
+      doc.rect(mX, startY, col1W + col2W, hdrH, 'FD')
+      doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(0, 0, 0)
+      doc.text('HEURE', mX + (col1W + col2W) / 2, startY + hdrH / 2 + 1.2, { align: 'center' })
 
-    // ── LOGO ──
-    if (cachedLogoImg && cachedLogoImg.complete && cachedLogoImg.naturalWidth > 0) {
-      try { doc.addImage(cachedLogoImg, 'JPEG', mX + 1, mY + 1, 14, 10) } catch (_) {}
-    } else {
-      doc.setFillColor(15, 118, 110)
-      doc.roundedRect(mX + 1, mY + 1, 14, 10, 2, 2, 'F')
-      doc.setFont('helvetica', 'bold').setFontSize(6).setTextColor(255, 255, 255)
-      doc.text('OFPPT', mX + 8, mY + 7, { align: 'center' })
-    }
-
-    // ── TITLE ──
-    doc.setTextColor(0, 0, 0)
-    doc.setFont('helvetica', 'bold').setFontSize(13)
-    doc.text('EMPLOI DU TEMPS DE LA SECTION', PW / 2, mY + 7, { align: 'center' })
-    doc.setFontSize(8.5)
-    doc.text(`ANNEE DE FORMATION : ${anneeFormation}`, PW / 2, mY + 13, { align: 'center' })
-
-    // ── META INFO (compact 2-column grid) ──
-    const metaY = mY + titleBlockH + 2
-    const metaFontSize = 7.5
-    doc.setFont('helvetica', 'normal').setFontSize(metaFontSize)
-    const lh = 3.8 // line height
-    doc.text('DRGC', mX + 2, metaY)
-    doc.text('Complexe/EFP : CFP IMME/ISTA MY RACHID', mX + 2, metaY + lh)
-    doc.text('Groupe :', mX + 2, metaY + lh * 2)
-    doc.text(`Fili\u00e8re : ${filiereCode}`, mX + 2, metaY + lh * 3)
-    doc.text(`Niveau : ${anneeLabel}`, mX + 2, metaY + lh * 4)
-    doc.text('Masse horaire :', mX + 2, metaY + lh * 5)
-    doc.text('Mode de formation : FPA', mX + 2, metaY + lh * 6 - 0.5)
-    doc.setFont('helvetica', 'bold')
-    doc.text(`P\u00e9riode d'application: ${periode}`, mX + contentW - 2, metaY + lh * 3, { align: 'right' })
-    doc.text('Parrains:', mX + contentW / 2, metaY + lh * 6 - 0.5)
-
-    // ── TABLE HEADERS ──
-    doc.setDrawColor(0, 0, 0).setLineWidth(0.35)
-
-    // Header row 1: HEURE
-    doc.setFillColor(200, 200, 200)
-    doc.rect(mX, tY, col1W + col2W, hdrH, 'FD')
-    doc.rect(mX + col1W + col2W, tY, contentW - col1W - col2W, hdrH, 'FD')
-    doc.setFont('helvetica', 'bold').setFontSize(7)
-    doc.text('HEURE', mX + col1W + col2W + (contentW - col1W - col2W) / 2, tY + hdrH / 2 + 1.2, { align: 'center' })
-
-    // Header row 2: JOUR | GROUPE | time slots
-    const h2Y = tY + hdrH
-    doc.setFillColor(185, 185, 185)
-    doc.rect(mX, h2Y, col1W, hdrH, 'FD')
-    doc.rect(mX + col1W, h2Y, col2W, hdrH, 'FD')
-    doc.setFont('helvetica', 'bold').setFontSize(6.5)
-    doc.text('JOUR', mX + col1W / 2, h2Y + hdrH / 2 + 1.2, { align: 'center' })
-    doc.text('GROUPE', mX + col1W + col2W / 2, h2Y + hdrH / 2 + 1.2, { align: 'center' })
-    TS.forEach((label, i) => {
-      const sx = mX + col1W + col2W + i * slotW
-      doc.setFillColor(217, 217, 217)
-      doc.rect(sx, h2Y, slotW, hdrH, 'FD')
-      doc.setFont('helvetica', 'bold').setFontSize(6)
-      doc.text(label, sx + slotW / 2, h2Y + hdrH / 2 + 1.2, { align: 'center' })
-      if (i > 0) doc.line(sx, tY, sx, h2Y + hdrH)
-    })
-
-    // ── BODY ROWS ──
-    JOURS.forEach((jour, jourIdx) => {
-      const dayTopY = bodyStartY + jourIdx * dayH
-
-      // Day label cell (merged across all group rows)
-      doc.setFillColor(226, 232, 240)
-      doc.rect(mX, dayTopY, col1W, numGroups * rowH, 'FD')
-      doc.setFont('helvetica', 'bold').setFontSize(Math.min(6.5, rowH * 0.8))
-      doc.setTextColor(30, 41, 59)
-      doc.text(jour, mX + col1W / 2, dayTopY + (numGroups * rowH) / 2 + 1, { align: 'center' })
-
-      sectionGroupes.forEach((groupe, grpIdx) => {
-        const rowY = dayTopY + grpIdx * rowH
-        const codeClean = groupe.code_groupe.toUpperCase().replace(/\s+/g, '')
-        const textMidY = rowY + rowH / 2 + 1
-
-        // Group name cell
-        doc.setFillColor(245, 247, 250)
-        doc.rect(mX + col1W, rowY, col2W, rowH, 'FD')
-        doc.setFont('helvetica', 'bold').setFontSize(Math.min(6, rowH * 0.75)).setTextColor(10, 22, 40)
-        doc.text(groupe.code_groupe, mX + col1W + col2W / 2, textMidY, { align: 'center' })
-
-        // Time slot cells
-        for (let sIdx = 0; sIdx < TS.length; sIdx++) {
-          const tsIdx = isCdsSection ? 4 : sIdx
-          const sx = mX + col1W + col2W + sIdx * slotW
-
-          if (groupe.en_stage) {
-            doc.setFillColor(241, 245, 249)
-            doc.rect(sx, rowY, slotW, rowH, 'FD')
-            doc.setFont('helvetica', 'italic').setFontSize(Math.min(5.5, rowH * 0.7)).setTextColor(71, 85, 105)
-            doc.text('Stage', sx + slotW / 2, textMidY, { align: 'center' })
-          } else {
-            const keyId  = groupe.id ? `${jour}__${groupe.id}__${tsIdx}` : ''
-            const keyCode = `${jour}__${codeClean}__${tsIdx}`
-            const cell   = (keyId && schedule[keyId]) || schedule[keyCode]
-
-            if (cell && (cell.nomFormateur || cell.nomSalle)) {
-              const txt = cell.nomSalle
-                ? `${cell.nomFormateur} AT ${cell.nomSalle}`
-                : cell.nomFormateur
-              doc.setFillColor(219, 234, 254)
-              doc.rect(sx, rowY, slotW, rowH, 'FD')
-              doc.setFont('helvetica', 'bold').setFontSize(Math.min(5.5, rowH * 0.68)).setTextColor(15, 23, 42)
-              const lines = doc.splitTextToSize(txt, slotW - 1.5)
-              const lineH2 = Math.min(3, rowH / (lines.length + 0.5))
-              const totalTxtH = lines.length * lineH2
-              const startTY = rowY + (rowH - totalTxtH) / 2 + lineH2 * 0.7
-              lines.forEach((line: string, li: number) => {
-                doc.text(line, sx + slotW / 2, startTY + li * lineH2, { align: 'center' })
-              })
-            } else {
-              doc.setFillColor(255, 255, 255)
-              doc.rect(sx, rowY, slotW, rowH, 'FD')
-            }
-          }
-
-          doc.setDrawColor(0, 0, 0).setLineWidth(0.25)
-          doc.rect(sx, rowY, slotW, rowH)
-        }
-
-        // Group cell border
-        doc.setDrawColor(0, 0, 0).setLineWidth(0.22)
-        doc.rect(mX + col1W, rowY, col2W, rowH)
+      // Time slots on Row 1
+      TS.forEach((label, i) => {
+        const sx = mX + col1W + col2W + i * slotW
+        doc.setFillColor(217, 217, 217)
+        doc.rect(sx, startY, slotW, hdrH, 'FD')
+        doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(0, 0, 0)
+        doc.text(label, sx + slotW / 2, startY + hdrH / 2 + 1.2, { align: 'center' })
       })
 
-      // Day outer border (bold)
-      doc.setDrawColor(0, 0, 0).setLineWidth(0.5)
-      doc.rect(mX, dayTopY, contentW, numGroups * rowH)
+      // Header row 2:
+      const h2Y = startY + hdrH
+      doc.setFillColor(185, 185, 185)
+      doc.rect(mX, h2Y, col1W, hdrH, 'FD')
+      doc.rect(mX + col1W, h2Y, col2W, hdrH, 'FD')
+      doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(0, 0, 0)
+      doc.text('JOUR', mX + col1W / 2, h2Y + hdrH / 2 + 1.2, { align: 'center' })
+      doc.text('GROUPE', mX + col1W + col2W / 2, h2Y + hdrH / 2 + 1.2, { align: 'center' })
+
+      // Time slots row 2 (clean background with borders)
+      TS.forEach((_, i) => {
+        const sx = mX + col1W + col2W + i * slotW
+        doc.setFillColor(232, 232, 232)
+        doc.rect(sx, h2Y, slotW, hdrH, 'FD')
+      })
+    }
+
+    // Helper: Draw Day Block (10 rows)
+    const drawDayBlock = (jour: string, dayTopY: number) => {
+      const dayTotalH = rowsPerDay * rowH
+
+      // 1. Day label cell (vertically merged across all rows of this day)
+      doc.setFillColor(226, 232, 240)
+      doc.setDrawColor(0, 0, 0).setLineWidth(0.4)
+      doc.rect(mX, dayTopY, col1W, dayTotalH, 'FD')
+      doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(15, 23, 42)
+      doc.text(jour, mX + col1W / 2, dayTopY + dayTotalH / 2 + 1.2, { align: 'center' })
+
+      // 2. Rows
+      for (let rIdx = 0; rIdx < rowsPerDay; rIdx++) {
+        const rowY = dayTopY + rIdx * rowH
+        const groupe = rIdx < sectionGroupes.length ? sectionGroupes[rIdx] : null
+        const textMidY = rowY + rowH / 2 + 1.1
+
+        // Groupe cell
+        doc.setFillColor(255, 255, 255)
+        doc.setDrawColor(0, 0, 0).setLineWidth(0.25)
+        doc.rect(mX + col1W, rowY, col2W, rowH, 'FD')
+
+        if (groupe) {
+          doc.setFont('helvetica', 'bold').setFontSize(6.8).setTextColor(0, 0, 0)
+          doc.text(groupe.code_groupe, mX + col1W + col2W / 2, textMidY, { align: 'center' })
+
+          // Time slot cells
+          for (let sIdx = 0; sIdx < TS.length; sIdx++) {
+            const tsIdx = isCdsSection ? 4 : sIdx
+            const sx = mX + col1W + col2W + sIdx * slotW
+            const codeClean = groupe.code_groupe.toUpperCase().replace(/\s+/g, '')
+
+            if (groupe.en_stage) {
+              doc.setFillColor(241, 245, 249)
+              doc.rect(sx, rowY, slotW, rowH, 'FD')
+              doc.setFont('helvetica', 'italic').setFontSize(6.2).setTextColor(71, 85, 105)
+              doc.text('Stage', sx + slotW / 2, textMidY, { align: 'center' })
+            } else {
+              const keyId = groupe.id ? `${jour}__${groupe.id}__${tsIdx}` : ''
+              const keyCode = `${jour}__${codeClean}__${tsIdx}`
+              const cell = (keyId && schedule[keyId]) || schedule[keyCode]
+
+              if (cell && (cell.nomFormateur || cell.nomSalle)) {
+                const pastel = getSectionFormateurColor(cell.nomFormateur)
+                doc.setFillColor(pastel[0], pastel[1], pastel[2])
+                doc.rect(sx, rowY, slotW, rowH, 'FD')
+
+                doc.setFont('helvetica', 'bold').setFontSize(6.5).setTextColor(0, 0, 0)
+                const txt = formatSectionSessionText(cell.nomFormateur, cell.nomSalle)
+                const lines = doc.splitTextToSize(txt, slotW - 2)
+                if (lines.length <= 1) {
+                  doc.text(txt, sx + slotW / 2, textMidY, { align: 'center' })
+                } else {
+                  const lineH = 2.3
+                  const totalH = lines.length * lineH
+                  const startLineY = rowY + (rowH - totalH) / 2 + 1.7
+                  lines.forEach((l: string, li: number) => {
+                    doc.text(l, sx + slotW / 2, startLineY + li * lineH, { align: 'center' })
+                  })
+                }
+              } else {
+                doc.setFillColor(255, 255, 255)
+                doc.rect(sx, rowY, slotW, rowH, 'FD')
+              }
+            }
+
+            doc.setDrawColor(0, 0, 0).setLineWidth(0.22)
+            doc.rect(sx, rowY, slotW, rowH)
+          }
+        } else {
+          // Empty matrix row
+          for (let sIdx = 0; sIdx < TS.length; sIdx++) {
+            const sx = mX + col1W + col2W + sIdx * slotW
+            doc.setFillColor(255, 255, 255)
+            doc.setDrawColor(0, 0, 0).setLineWidth(0.2)
+            doc.rect(sx, rowY, slotW, rowH, 'FD')
+          }
+        }
+      }
+
+      // Day outer border
+      doc.setDrawColor(0, 0, 0).setLineWidth(0.45)
+      doc.rect(mX, dayTopY, contentW, dayTotalH)
 
       // Separator stripe between days
-      const sepY = dayTopY + numGroups * rowH
-      const sepColor = jourIdx % 2 === 0 ? [220, 232, 247] as const : [238, 243, 251] as const
-      doc.setFillColor(sepColor[0], sepColor[1], sepColor[2])
+      const sepY = dayTopY + dayTotalH
+      doc.setFillColor(220, 232, 247)
       doc.rect(mX, sepY, contentW, sepH, 'F')
-      doc.setDrawColor(0).setLineWidth(0.35)
+      doc.setDrawColor(0, 0, 0).setLineWidth(0.3)
       doc.rect(mX, sepY, contentW, sepH)
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── PAGE 1: LUNDI, MARDI, MERCREDI ──
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // 1. Logo
+    if (cachedLogoImg && cachedLogoImg.complete && cachedLogoImg.naturalWidth > 0) {
+      try { doc.addImage(cachedLogoImg, 'JPEG', mX + 1, mY + 1, 15, 11) } catch (_) {}
+    } else {
+      doc.setFillColor(15, 118, 110)
+      doc.roundedRect(mX + 1, mY + 1, 15, 11, 2, 2, 'F')
+      doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(255, 255, 255)
+      doc.text('OFPPT', mX + 8.5, mY + 7.5, { align: 'center' })
+    }
+
+    // 2. Title & Subtitle
+    doc.setTextColor(0, 0, 0)
+    doc.setFont('helvetica', 'bold').setFontSize(14)
+    doc.text('EMPLOI DU TEMPS DE LA SECTION', PW / 2, mY + 6, { align: 'center' })
+    doc.setFontSize(9)
+    doc.text(`ANNEE DE FORMATION : ${anneeFormation}`, PW / 2, mY + 11.5, { align: 'center' })
+
+    // 3. Meta block
+    const metaY = mY + 14.5
+    const lh = 3.3
+    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(0, 0, 0)
+
+    // Left column
+    doc.setFont('helvetica', 'bold').text('DRGC', mX + 1, metaY)
+    doc.setFont('helvetica', 'normal').text('Complexe/EFP : CFP IMME/ISTA MY RACHID', mX + 1, metaY + lh)
+    doc.text('Groupe :', mX + 1, metaY + lh * 2)
+    doc.text(`Fili\u00e8re : ${filiereCode}`, mX + 1, metaY + lh * 3)
+    doc.text(`Niveau : ${anneeLabel}`, mX + 1, metaY + lh * 4)
+    doc.text('Masse horaire :', mX + 1, metaY + lh * 5)
+    doc.text(`Mode de formation : ${isCdsSection ? 'CDS' : 'FPA'}`, mX + 1, metaY + lh * 6)
+
+    // Right column
+    doc.setFont('helvetica', 'bold')
+    doc.text(`P\u00e9riode d'application: ${periode}`, mX + contentW - 2, metaY + lh * 3, { align: 'right' })
+    doc.text('Parrain:', mX + contentW - 2, metaY + lh * 4, { align: 'right' })
+
+    // 4. Table Header on Page 1
+    const tY1 = metaY + lh * 6 + 2.5
+    drawTableHeaders(tY1)
+
+    // 5. Days on Page 1: LUNDI, MARDI, MERCREDI
+    const page1Days = ['LUNDI', 'MARDI', 'MERCREDI']
+    const bodyStartY1 = tY1 + hdrH * 2
+    page1Days.forEach((jour, jIdx) => {
+      const dayTopY = bodyStartY1 + jIdx * (rowsPerDay * rowH + sepH)
+      drawDayBlock(jour, dayTopY)
     })
 
-    // ── SIGNATURES ──
-    const sigY = bodyStartY + numDays * dayH + 1
-    const sigColW = contentW / 3
-    const actualSigH = Math.max(sigH, PH - sigY - mY - 1)
-    doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(0, 0, 0)
-    doc.setDrawColor(0).setLineWidth(0.45)
-    doc.rect(mX, sigY, contentW, actualSigH)
-    doc.line(mX + sigColW, sigY, mX + sigColW, sigY + actualSigH)
-    doc.line(mX + sigColW * 2, sigY, mX + sigColW * 2, sigY + actualSigH)
-    doc.text('Formateur', mX + sigColW / 2, sigY + 3.5, { align: 'center' })
-    doc.text('Directeur / Directeur P\u00e9dagogique', mX + sigColW + sigColW / 2, sigY + 3.5, { align: 'center' })
-    doc.text('Directeur du Complexe', mX + sigColW * 2 + sigColW / 2, sigY + 3.5, { align: 'center' })
-    doc.setLineWidth(0.25)
-    doc.line(mX, sigY + 5.5, mX + contentW, sigY + 5.5)
+    // Page 1 footer
+    doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(100, 116, 139)
+    const pageStr1 = typeof sectionIndex === 'number' && totalSections
+      ? `Section ${sectionIndex + 1}/${totalSections} • Page 1 / 2`
+      : 'Page 1 / 2'
+    doc.text(pageStr1, mX + contentW, PH - 2, { align: 'right' })
 
-    // Page number
-    if (totalPages && totalPages > 1 && typeof pageIndex === 'number') {
-      doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(100, 116, 139)
-      doc.text(`Page ${pageIndex + 1} / ${totalPages}`, mX + contentW, PH - 1.5, { align: 'right' })
-    }
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── PAGE 2: JEUDI, VENDREDI, SAMEDI + SIGNATURES ──
+    // ══════════════════════════════════════════════════════════════════════════
+    doc.addPage('a4', 'landscape')
+
+    const tY2 = mY + 2
+    drawTableHeaders(tY2)
+
+    const page2Days = ['JEUDI', 'VENDREDI', 'SAMEDI']
+    const bodyStartY2 = tY2 + hdrH * 2
+    page2Days.forEach((jour, jIdx) => {
+      const dayTopY = bodyStartY2 + jIdx * (rowsPerDay * rowH + sepH)
+      drawDayBlock(jour, dayTopY)
+    })
+
+    // Signatures footer on Page 2
+    const lastDayBottomY = bodyStartY2 + page2Days.length * (rowsPerDay * rowH + sepH)
+    const sigY = lastDayBottomY + 2
+    const sigColW = contentW / 3
+    const sigH = 26
+
+    doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(0, 0, 0)
+    doc.setDrawColor(0, 0, 0).setLineWidth(0.45)
+    doc.rect(mX, sigY, contentW, sigH)
+    doc.line(mX + sigColW, sigY, mX + sigColW, sigY + sigH)
+    doc.line(mX + sigColW * 2, sigY, mX + sigColW * 2, sigY + sigH)
+
+    doc.text('Formateur', mX + sigColW / 2, sigY + 4.5, { align: 'center' })
+    doc.text('Directeur / Directeur P\u00e9dagogique', mX + sigColW + sigColW / 2, sigY + 4.5, { align: 'center' })
+    doc.text('Directeur du Complexe', mX + sigColW * 2 + sigColW / 2, sigY + 4.5, { align: 'center' })
+
+    doc.setLineWidth(0.25)
+    doc.line(mX, sigY + 6.8, mX + contentW, sigY + 6.8)
+
+    // Page 2 footer
+    doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(100, 116, 139)
+    const pageStr2 = typeof sectionIndex === 'number' && totalSections
+      ? `Section ${sectionIndex + 1}/${totalSections} • Page 2 / 2`
+      : 'Page 2 / 2'
+    doc.text(pageStr2, mX + contentW, PH - 2, { align: 'right' })
   }
 
   // ══════════════════════════════════════════════════════════════════════════

@@ -1490,128 +1490,176 @@ export default function HubPage({ onNavigate }: HubPageProps): React.ReactElemen
                   </tr>
                 </thead>
                 <tbody>
-                  {JOURS_LIST.map((jour, jourIdx) => (
-                    <React.Fragment key={jour}>
-                      {selectedSection.groupes.map((groupe, grpIdx) => {
-                        const isEnStage = groupe.en_stage
-                        return (
-                          <tr key={groupe.id}>
-                            {/* Day cell merged vertically */}
-                            {grpIdx === 0 && (
-                              <td
-                                rowSpan={selectedSection.groupes.length}
-                                style={{
-                                  border: '2px solid #000',
-                                  textAlign: 'center',
-                                  fontWeight: 900,
-                                  fontSize: 12,
-                                  background: '#e2e8f0',
-                                  color: '#1e293b',
-                                  verticalAlign: 'middle',
-                                  padding: '4px 2px',
-                                  textTransform: 'uppercase',
-                                  letterSpacing: 0.5,
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                {jour.toUpperCase()}
-                              </td>
-                            )}
-                            {/* Groupe code */}
-                            <td style={{ border: '1.5px solid #000', textAlign: 'center', fontWeight: 700, fontSize: 11, padding: '5px 2px', background: '#f5f7fa', color: '#0a1628', whiteSpace: 'nowrap' }}>
-                              {groupe.code_groupe}
-                            </td>
-                            {/* Time-slot cell(s) */}
-                            {TS_LABELS.map((_, tsIdx) => {
-                              const jourUpper = jour.toUpperCase()
-                              const codeClean = groupe.code_groupe.toUpperCase().replace(/\s+/g, '')
+                  {JOURS_LIST.map((jour, jourIdx) => {
+                    const rowsCount = Math.max(10, selectedSection.groupes.length)
+                    return (
+                      <React.Fragment key={jour}>
+                        {Array.from({ length: rowsCount }).map((_, rIdx) => {
+                          const groupe = rIdx < selectedSection.groupes.length ? selectedSection.groupes[rIdx] : null
+                          const isEnStage = groupe?.en_stage
+                          const rowKey = groupe ? groupe.id : `empty_${jour}_${rIdx}`
 
-                              // Pour le CDS, on cherche la séance du jour sur le créneau du soir (4) en priorité
-                              let cell: { nomFormateur: string; nomSalle: string; module?: string } | undefined
-                              if (isCds) {
-                                const possibleKeys = [
-                                  ...[4, 0, 1, 2, 3].map(i => groupe.id ? `${jourUpper}__${groupe.id}__${i}` : ''),
-                                  ...[4, 0, 1, 2, 3].map(i => `${jourUpper}__${codeClean}__${i}`)
-                                ].filter(Boolean)
-                                for (const pk of possibleKeys) {
-                                  if (selectedSection.schedule[pk]) {
-                                    cell = selectedSection.schedule[pk]
-                                    break
-                                  }
-                                }
-                              } else {
-                                const keyWithId = groupe.id ? `${jourUpper}__${groupe.id}__${tsIdx}` : ''
-                                const keyWithCode = `${jourUpper}__${codeClean}__${tsIdx}`
-                                cell = (keyWithId && selectedSection.schedule[keyWithId]) || selectedSection.schedule[keyWithCode]
-                              }
-
-                              // 1. If group is in stage, it takes full priority for all slots from 8h30 to 18h30 (Gris clair sobre)
-                              if (isEnStage) {
-                                return (
-                                  <td
-                                    key={tsIdx}
-                                    style={{
-                                      border: '1.5px solid #000',
-                                      textAlign: 'center',
-                                      fontSize: 11,
-                                      fontStyle: 'italic',
-                                      fontWeight: 700,
-                                      color: '#475569',
-                                      background: '#f1f5f9',
-                                      padding: '6px 4px',
-                                      userSelect: 'none'
-                                    }}
-                                  >
-                                    Stage
-                                  </td>
-                                )
-                              }
-
-                              // 2. Otherwise if an actual session exists, show it (Format Excel: PROF AT SALLE)
-                              if (cell && (cell.nomFormateur || cell.nomSalle)) {
-                                const displayText = cell.nomSalle
-                                  ? `${cell.nomFormateur} AT ${cell.nomSalle}`
-                                  : cell.nomFormateur
-                                return (
-                                  <td
-                                    key={tsIdx}
-                                    style={{
-                                      border: '1.5px solid #000',
-                                      textAlign: 'center',
-                                      fontSize: 12,
-                                      padding: '8px 6px',
-                                      fontWeight: 800,
-                                      color: '#0f172a',
-                                      background: '#f8fafc',
-                                      userSelect: 'none'
-                                    }}
-                                  >
-                                    {displayText}
-                                  </td>
-                                )
-                              }
-
-                              // 3. Otherwise empty cell
-                              return (
+                          return (
+                            <tr key={rowKey}>
+                              {/* Day cell merged vertically */}
+                              {rIdx === 0 && (
                                 <td
-                                  key={tsIdx}
+                                  rowSpan={rowsCount}
                                   style={{
-                                    border: '1px solid #bbb',
-                                    background: '#fff',
-                                    padding: '6px 4px'
+                                    border: '2px solid #000',
+                                    textAlign: 'center',
+                                    fontWeight: 900,
+                                    fontSize: 12,
+                                    background: '#e2e8f0',
+                                    color: '#1e293b',
+                                    verticalAlign: 'middle',
+                                    padding: '4px 2px',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: 0.5,
+                                    whiteSpace: 'nowrap'
                                   }}
-                                />
-                              )
-                            })}
-                          </tr>
-                        )
-                      })}
-                      {/* Day separator stripe */}
-                      <tr>
-                        <td colSpan={2 + TS_LABELS.length} style={{ height: 9, background: jourIdx % 2 === 0 ? '#dce8f7' : '#eef3fb', borderLeft: '2px solid #000', borderRight: '2px solid #000', borderBottom: '2px solid #000' }} />
-                      </tr>
-                    </React.Fragment>
-                  ))}
+                                >
+                                  {jour.toUpperCase()}
+                                </td>
+                              )}
+
+                              {/* Groupe code */}
+                              <td style={{ border: '1.5px solid #000', textAlign: 'center', fontWeight: 700, fontSize: 11, padding: '5px 2px', background: '#f5f7fa', color: '#0a1628', whiteSpace: 'nowrap', height: 26 }}>
+                                {groupe ? groupe.code_groupe : ''}
+                              </td>
+
+                              {/* Time-slot cell(s) */}
+                              {TS_LABELS.map((_, tsIdx) => {
+                                if (!groupe) {
+                                  return (
+                                    <td
+                                      key={tsIdx}
+                                      style={{
+                                        border: '1px solid #bbb',
+                                        background: '#fff',
+                                        padding: '4px 6px',
+                                        height: 26
+                                      }}
+                                    />
+                                  )
+                                }
+
+                                const jourUpper = jour.toUpperCase()
+                                const codeClean = groupe.code_groupe.toUpperCase().replace(/\s+/g, '')
+
+                                // Pour le CDS, on cherche la séance du soir en priorité
+                                let cell: { nomFormateur: string; nomSalle: string; module?: string } | undefined
+                                if (isCds) {
+                                  const possibleKeys = [
+                                    ...[4, 0, 1, 2, 3].map(i => groupe.id ? `${jourUpper}__${groupe.id}__${i}` : ''),
+                                    ...[4, 0, 1, 2, 3].map(i => `${jourUpper}__${codeClean}__${i}`)
+                                  ].filter(Boolean)
+                                  for (const pk of possibleKeys) {
+                                    if (selectedSection.schedule[pk]) {
+                                      cell = selectedSection.schedule[pk]
+                                      break
+                                    }
+                                  }
+                                } else {
+                                  const keyWithId = groupe.id ? `${jourUpper}__${groupe.id}__${tsIdx}` : ''
+                                  const keyWithCode = `${jourUpper}__${codeClean}__${tsIdx}`
+                                  cell = (keyWithId && selectedSection.schedule[keyWithId]) || selectedSection.schedule[keyWithCode]
+                                }
+
+                                // 1. Stage
+                                if (isEnStage) {
+                                  return (
+                                    <td
+                                      key={tsIdx}
+                                      style={{
+                                        border: '1.5px solid #000',
+                                        textAlign: 'center',
+                                        fontSize: 11,
+                                        fontStyle: 'italic',
+                                        fontWeight: 700,
+                                        color: '#475569',
+                                        background: '#f1f5f9',
+                                        padding: '5px 4px',
+                                        userSelect: 'none'
+                                      }}
+                                    >
+                                      Stage
+                                    </td>
+                                  )
+                                }
+
+                                // 2. Session exists with Pastel Background
+                                if (cell && (cell.nomFormateur || cell.nomSalle)) {
+                                  const prof = (cell.nomFormateur || '').trim().toUpperCase()
+                                  let salle = (cell.nomSalle || '').trim().toUpperCase()
+                                  if (
+                                    salle &&
+                                    !salle.startsWith('AT ') &&
+                                    !salle.startsWith('ATELIER') &&
+                                    !salle.startsWith('SALLE') &&
+                                    !salle.startsWith('LABO') &&
+                                    !salle.startsWith('AMPHI')
+                                  ) {
+                                    if (salle === 'PC' || salle.length <= 8) {
+                                      salle = `AT ${salle}`
+                                    }
+                                  }
+                                  const displayText = salle ? `${prof} - ${salle}` : prof
+
+                                  // Formateur pastel background color
+                                  let pastelBg = '#f1f5f9'
+                                  if (prof.includes('MEBSOUT')) pastelBg = '#d8b4e2'
+                                  else if (prof.includes('BERRADA')) pastelBg = '#f4b6b6'
+                                  else if (prof.includes('DEBBAR')) pastelBg = '#fed7aa'
+                                  else if (prof.includes('KHOUTAM')) pastelBg = '#f1f5f9'
+                                  else {
+                                    const colors = ['#d8b4e2', '#f4b6b6', '#fed7aa', '#c6f6d5', '#cffafe', '#fef08a', '#e0e7ff', '#fde68a']
+                                    let hash = 0
+                                    for (let i = 0; i < prof.length; i++) hash = (hash * 31 + prof.charCodeAt(i)) % colors.length
+                                    pastelBg = colors[Math.abs(hash)]
+                                  }
+
+                                  return (
+                                    <td
+                                      key={tsIdx}
+                                      style={{
+                                        border: '1.5px solid #000',
+                                        textAlign: 'center',
+                                        fontSize: 11.5,
+                                        padding: '6px 4px',
+                                        fontWeight: 800,
+                                        color: '#000000',
+                                        background: pastelBg,
+                                        userSelect: 'none'
+                                      }}
+                                    >
+                                      {displayText}
+                                    </td>
+                                  )
+                                }
+
+                                // 3. Empty cell
+                                return (
+                                  <td
+                                    key={tsIdx}
+                                    style={{
+                                      border: '1px solid #bbb',
+                                      background: '#fff',
+                                      padding: '4px 6px'
+                                    }}
+                                  />
+                                )
+                              })}
+                            </tr>
+                          )
+                        })}
+                        {/* Day separator stripe */}
+                        <tr>
+                          <td colSpan={2 + TS_LABELS.length} style={{ height: 8, background: jourIdx % 2 === 0 ? '#dce8f7' : '#eef3fb', borderLeft: '2px solid #000', borderRight: '2px solid #000', borderBottom: '2px solid #000' }} />
+                        </tr>
+                      </React.Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
 
