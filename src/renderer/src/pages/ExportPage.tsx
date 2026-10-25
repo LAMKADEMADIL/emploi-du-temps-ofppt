@@ -50,6 +50,8 @@ try {
 export default function ExportPage(): React.ReactElement {
   const [formateurs, setFormateurs] = useState<Formateur[]>([])
   const [groupes, setGroupes] = useState<Groupe[]>([])
+  // All groupes INCLUDING en_stage — used for section building so stage groups appear in PDF
+  const [allGroupesFull, setAllGroupesFull] = useState<Groupe[]>([])
   const [salles, setSalles] = useState<Salle[]>([])
   const [filieres, setFilieres] = useState<Filiere[]>([])
   const [planningSallesMap, setPlanningSallesMap] = useState<Record<string, any>>({})
@@ -86,7 +88,10 @@ export default function ExportPage(): React.ReactElement {
         ])
 
         setFormateurs(fData)
+        // groupes without stage → used for formateur/groupe export selectors
         setGroupes(gData.filter(g => !g.en_stage).sort((a, b) => a.code_groupe.localeCompare(b.code_groupe)))
+        // allGroupesFull WITH stage → used for section building so stage rows appear in PDF
+        setAllGroupesFull(gData.sort((a, b) => a.code_groupe.localeCompare(b.code_groupe)))
         setSalles(sData)
         setFilieres(filData)
         setPlanningSallesMap(psData || {})
@@ -1082,8 +1087,9 @@ export default function ExportPage(): React.ReactElement {
   // ══════════════════════════════════════════════════════════════════════════
   // FILIERE: Get all groups of a given filiere
   // ══════════════════════════════════════════════════════════════════════════
+  // For section building: use allGroupesFull (includes en_stage) so stage groups appear in PDF
   function getGroupesForFiliere(targetFiliere: Filiere): Groupe[] {
-    return groupes.filter(g => {
+    return allGroupesFull.filter(g => {
       if (g.id_filiere && g.id_filiere === targetFiliere.id) return true
       if (g.filiere && g.filiere.toUpperCase() === targetFiliere.code_filiere.toUpperCase()) return true
       const extracted = extractFiliereFromGroup(g.code_groupe)
@@ -1092,6 +1098,7 @@ export default function ExportPage(): React.ReactElement {
   }
 
   // Get groups of a filiere filtered by year digit (1 = 1ère année, 2 = 2ème année)
+  // Includes en_stage groups so they appear as "Stage" rows in the section PDF
   function getGroupesForFiliereByYear(targetFiliere: Filiere, yearDigit: '1' | '2'): Groupe[] {
     return getGroupesForFiliere(targetFiliere).filter(g => {
       if (/CDS/i.test(g.code_groupe)) return false
@@ -1168,7 +1175,7 @@ export default function ExportPage(): React.ReactElement {
     }
 
     return list.sort((a, b) => a.code_section.localeCompare(b.code_section))
-  }, [filieres, groupes])
+  }, [filieres, groupes, allGroupesFull])
 
   const filteredSections = useMemo(() => {
     const term = searchSection.toLowerCase().trim()
