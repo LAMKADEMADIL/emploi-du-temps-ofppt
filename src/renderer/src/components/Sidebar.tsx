@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -11,7 +11,9 @@ import {
   ChevronRight,
   Network,
   Grid3X3,
-  Database
+  Database,
+  User,
+  LogOut
 } from 'lucide-react'
 import type { NavPage } from '../types'
 import { useTranslation } from '../lib/i18n'
@@ -22,10 +24,24 @@ interface SidebarProps {
   onNavigate: (page: NavPage) => void
   isOpen?: boolean
   onToggle?: () => void
+  onLogout?: () => void
 }
 
-export default function Sidebar({ currentPage, onNavigate, isOpen = true, onToggle }: SidebarProps): React.ReactElement {
+export default function Sidebar({ currentPage, onNavigate, isOpen = true, onToggle, onLogout }: SidebarProps): React.ReactElement {
   const { t } = useTranslation()
+
+  // Dynamic application name synced with settings
+  const [appName, setAppName] = useState<string>(
+    () => localStorage.getItem('app_name') || 'Gestion du Temps'
+  )
+
+  useEffect(() => {
+    const handleAppNameChange = (): void => {
+      setAppName(localStorage.getItem('app_name') || 'Gestion du Temps')
+    }
+    window.addEventListener('app_name_changed', handleAppNameChange)
+    return () => window.removeEventListener('app_name_changed', handleAppNameChange)
+  }, [])
 
   const navItems = [
     { id: 'hub' as NavPage, label: 'nav.hub', icon: <LayoutDashboard size={22} />, section: 'nav.section.main' },
@@ -37,7 +53,8 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
     { id: 'salles' as NavPage, label: 'nav.salles', icon: <DoorOpen size={22} /> },
     { id: 'filieres' as NavPage, label: 'nav.filieres', icon: <BookOpen size={22} /> },
     { id: 'groupes' as NavPage, label: 'nav.groupes', icon: <UsersRound size={22} /> },
-    { id: 'export' as NavPage, label: 'nav.export', icon: <FileDown size={22} />, section: 'nav.section.reports' }
+    { id: 'export' as NavPage, label: 'nav.export', icon: <FileDown size={22} />, section: 'nav.section.reports' },
+    { id: 'settings' as NavPage, label: 'nav.settings', icon: <User size={22} />, section: 'nav.section.config' }
   ]
 
   let lastSection = ''
@@ -75,7 +92,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
               />
             </div>
             <div className="sidebar-logo-text">
-              <h2>Gestion du Temps </h2>
+              <h2>{appName}</h2>
               <span>OFPPT - ISTA</span>
             </div>
           </div>
@@ -115,11 +132,22 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
         </nav>
     
         <div className="sidebar-footer">
-          <div className="connection-badge" style={{ fontSize: '13px', padding: '9px 12px' }}>
+          <div className="connection-badge" style={{ fontSize: '13px', padding: '9px 12px', marginBottom: '10px' }}>
             <div className="connection-dot" />
             <Wifi size={16} />
             <span>{t('sidebar.connected')}</span>
           </div>
+
+          {onLogout && (
+            <button
+              className="sidebar-logout-btn"
+              onClick={onLogout}
+              title={t('nav.logout')}
+            >
+              <LogOut size={16} />
+              <span>{t('nav.logout')}</span>
+            </button>
+          )}
         </div>
       </div>
     </aside>

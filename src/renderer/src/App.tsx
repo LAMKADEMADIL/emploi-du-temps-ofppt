@@ -12,19 +12,30 @@ import FilieresPage from './pages/FilieresPage'
 import GroupesPage from './pages/GroupesPage'
 import VacancesPage from './pages/VacancesPage'
 import ExportPage from './pages/ExportPage'
+import SplashScreen from './pages/SplashScreen'
+import LoginPage from './pages/LoginPage'
+import SettingsPage from './pages/SettingsPage'
 import type { NavPage } from './types'
 import { Toaster, toast } from 'react-hot-toast'
 import { I18nProvider, useTranslation } from './lib/i18n'
 import { seedDemoData, migrateSalles } from './lib/seedData'
 import { Menu } from 'lucide-react'
 
+// ── App screen states ─────────────────────────────────────────────────────────
+type AppScreen = 'splash' | 'login' | 'app'
+
 function AppContent(): React.ReactElement {
+  const { lang } = useTranslation()
+
+  // Determine initial screen: skip splash/login if already logged in
+  const alreadyLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
+  const [screen, setScreen] = useState<AppScreen>(alreadyLoggedIn ? 'app' : 'splash')
+
   const [currentPage, setCurrentPage] = useState<NavPage>('hub')
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     const saved = localStorage.getItem('sidebar_open')
     return saved !== null ? saved === 'true' : true
   })
-  const { lang } = useTranslation()
 
   const toggleSidebar = (): void => {
     setSidebarOpen((prev) => {
@@ -32,6 +43,13 @@ function AppContent(): React.ReactElement {
       localStorage.setItem('sidebar_open', String(next))
       return next
     })
+  }
+
+  const handleLogout = (): void => {
+    localStorage.removeItem('isLoggedIn')
+    setScreen('login')
+    setCurrentPage('hub')
+    toast.success(lang === 'ar' ? '✅ تم تسجيل الخروج بنجاح' : '✅ Déconnexion réussie')
   }
 
   // Keyboard shortcut Ctrl+B / Cmd+B to toggle sidebar
@@ -46,16 +64,16 @@ function AppContent(): React.ReactElement {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Seed data only after logged in
   useEffect(() => {
-    // أولاً: ترحيل القاعات القديمة تلقائياً
+    if (screen !== 'app') return
     migrateSalles()
-    // ثانياً: تحميل البيانات التجريبية إن لم تكن موجودة
     seedDemoData().then((seeded) => {
       if (seeded) {
         toast.success(lang === 'ar' ? '✅ تم تحميل البيانات التجريبية!' : '✅ Données de démonstration chargées!')
       }
     })
-  }, [])
+  }, [screen])
 
   const renderPage = (): React.ReactElement => {
     switch (currentPage) {
@@ -70,10 +88,26 @@ function AppContent(): React.ReactElement {
       case 'groupes': return <GroupesPage />
       case 'vacances': return <VacancesPage />
       case 'export': return <ExportPage />
+      case 'settings': return <SettingsPage />
       default: return <HubPage onNavigate={setCurrentPage} />
     }
   }
 
+  // ── SPLASH ──────────────────────────────────────────────────────────────────
+  if (screen === 'splash') {
+    return (
+      <SplashScreen onFinish={() => setScreen('login')} />
+    )
+  }
+
+  // ── LOGIN ───────────────────────────────────────────────────────────────────
+  if (screen === 'login') {
+    return (
+      <LoginPage onLoginSuccess={() => setScreen('app')} />
+    )
+  }
+
+  // ── MAIN APP ─────────────────────────────────────────────────────────────────
   return (
     <div className={`app-layout ${!sidebarOpen ? 'sidebar-is-collapsed' : ''}`}>
       <Toaster
@@ -110,6 +144,7 @@ function AppContent(): React.ReactElement {
         onNavigate={setCurrentPage}
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
+        onLogout={handleLogout}
       />
     </div>
   )
@@ -124,3 +159,4 @@ function App(): React.ReactElement {
 }
 
 export default App
+

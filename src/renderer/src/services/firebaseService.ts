@@ -294,3 +294,86 @@ export const planningSallesService = {
     await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
   }
 }
+
+// ============================
+// USERS SERVICE (AUTHENTICATION & PROFILE)
+// ============================
+export interface UserDocument {
+  id?: string
+  nom?: string
+  nom_complet?: string
+  matricule: string
+  email: string
+  password?: string
+  role?: string
+  createdAt?: any
+}
+
+export const usersService = {
+  // جلب المستخدم بواسطة البريد أو رقم التأجير (Matricule) مع دعم الأسماء الفرنسية والحروف الكبيرة
+  async getByIdentifier(identifier: string): Promise<UserDocument | null> {
+    const norm = identifier.trim().toLowerCase()
+    const snap = await getDocs(collection(db, 'users'))
+    for (const d of snap.docs) {
+      const data = d.data() as any
+      const mail = String(data.email || data.Email || data.mail || '').trim().toLowerCase()
+      const mat = String(data.matricule || data.Matricule || '').trim().toLowerCase()
+      if (mail === norm || mat === norm) {
+        return {
+          id: d.id,
+          nom: data.nom || data.Nom || data.nom_complet || '',
+          matricule: data.matricule || data.Matricule || '',
+          email: data.email || data.Email || '',
+          password: String(
+            data.password !== undefined
+              ? data.password
+              : data['Mot de passe'] !== undefined
+              ? data['Mot de passe']
+              : data['mot de passe'] !== undefined
+              ? data['mot de passe']
+              : data.mot_de_passe || ''
+          ),
+          role: data.role || data.Role || 'Directeur',
+          ...data
+        }
+      }
+    }
+    return null
+  },
+
+  // تحديث بيانات المستخدم في Firebase مع الحفاظ على الحقول الفرنسية والحروف الكبيرة
+  async update(id: string, data: Partial<UserDocument>): Promise<void> {
+    const payload: any = { ...data }
+    if (data.password !== undefined) {
+      payload['Mot de passe'] = data.password
+      payload.password = data.password
+    }
+    if (data.nom !== undefined) {
+      payload.Nom = data.nom
+      payload.nom = data.nom
+    }
+    if (data.matricule !== undefined) {
+      payload.Matricule = data.matricule
+      payload.matricule = data.matricule
+    }
+    if (data.email !== undefined) {
+      payload.Email = data.email
+      payload.email = data.email
+    }
+    await updateDoc(doc(db, 'users', id), payload)
+  },
+
+  // إنشاء مستخدم جديد
+  async create(data: Omit<UserDocument, 'id'>): Promise<string> {
+    const payload: any = {
+      ...data,
+      Nom: data.nom,
+      Matricule: data.matricule,
+      Email: data.email,
+      'Mot de passe': data.password,
+      createdAt: serverTimestamp()
+    }
+    const ref = await addDoc(collection(db, 'users'), payload)
+    return ref.id
+  }
+}

@@ -45,10 +45,13 @@ export const translations: Translations = {
   'nav.timetable': { ar: 'جدول الحصص', fr: 'Emploi du temps' },
   'nav.vacances': { ar: 'البحث عن قاعة فارغة', fr: 'Trouver Salle Vide' },
   'nav.export': { ar: 'التصدير PDF', fr: 'Export PDF' },
+  'nav.settings': { ar: 'الملف الشخصي', fr: 'Mon Profil' },
+  'nav.logout': { ar: 'تسجيل الخروج', fr: 'Déconnexion' },
   'nav.section.main': { ar: 'رئيسي', fr: 'Principal' },
   'nav.section.data': { ar: 'البيانات الأساسية', fr: 'Données de base' },
   'nav.section.plan': { ar: 'التخطيط', fr: 'Planification' },
   'nav.section.reports': { ar: 'التقارير', fr: 'Rapports' },
+  'nav.section.config': { ar: 'الإعدادات والملف', fr: 'Paramètres' },
   'sidebar.connected': { ar: 'Firebase متصل', fr: 'Firebase connecté' },
 
   // Dashboard

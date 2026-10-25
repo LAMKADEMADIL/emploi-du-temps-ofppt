@@ -104,3 +104,4 @@ export type NavPage =
   | 'groupes'
   | 'vacances'
   | 'export'
+  | 'settings'
