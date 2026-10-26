@@ -7,7 +7,6 @@ import {
   BookOpen,
   UsersRound,
   FileDown,
-  Wifi,
   ChevronRight,
   Network,
   Grid3X3,
@@ -132,12 +131,6 @@ export default function Sidebar({ currentPage, onNavigate, isOpen = true, onTogg
         </nav>
     
         <div className="sidebar-footer">
-          <div className="connection-badge" style={{ fontSize: '13px', padding: '9px 12px', marginBottom: '10px' }}>
-            <div className="connection-dot" />
-            <Wifi size={16} />
-            <span>{t('sidebar.connected')}</span>
-          </div>
-
           {onLogout && (
             <button
               className="sidebar-logout-btn"
